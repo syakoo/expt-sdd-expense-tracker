@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.output/
+.tanstack/
+.vinxi/
+.nitro/
+*.tsbuildinfo
+*.log
+
+data/*.db
+data/*.db-*
+
+test-results/
+playwright-report/
+
+.DS_Store

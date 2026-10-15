@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. プロジェクト基盤とツールチェーン
-- [ ] 1.1 TanStack Start プロジェクトの初期構築
+- [x] 1.1 TanStack Start プロジェクトの初期構築
   - Node.js 24 の前提（バージョンファイルと `engines`）、ES モジュール形式のパッケージ定義、design の Technology Stack に記載された版の依存を追加する
   - TypeScript（strict、`@/*` → `src/*` のパスエイリアス）、Vite（TanStack Start → React → Tailwind の順のプラグイン、パスエイリアス解決、ポート 3000）、Tailwind の読み込みを構成する
   - ルーターを `scrollRestoration` 有効、ホバー先読みなし、非表示ルートのデータを即時破棄する設定で作る（エラー・未検出表示の既定コンポーネントは 7.2 で追加）
