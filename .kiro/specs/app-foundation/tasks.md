@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. プロジェクト基盤とツールチェーン
+- [x] 1. プロジェクト基盤とツールチェーン
 - [x] 1.1 TanStack Start プロジェクトの初期構築
   - Node.js 24 の前提（バージョンファイルと `engines`）、ES モジュール形式のパッケージ定義、design の Technology Stack に記載された版の依存を追加する
   - TypeScript（strict、`@/*` → `src/*` のパスエイリアス）、Vite（TanStack Start → React → Tailwind の順のプラグイン、パスエイリアス解決、ポート 3000）、Tailwind の読み込みを構成する
@@ -25,7 +25,7 @@
   - パスエイリアス経由で import する一時的なテストが `npm run test` で通り、`npx playwright test --list` が設定エラーなしで終わる（一時テストは確認後に削除する）
   - _Requirements: 1.1_
 
-- [ ] 1.4 import 境界の Lint ルール
+- [x] 1.4 import 境界の Lint ルール
   - 制限パターンを設定ファイル内の定数にまとめ、各設定ブロックで必要な分を展開する（flat config の上書きで制限が消えないようにする）
   - `src` 全体で `../` で始まる import を禁止する
   - `identity` と `db` の外のファイルでは、`@/identity/schema` を除く `@/identity/*` と、`@/db/client.server` を除く `@/db/*` を禁止する。`@/identity/ui` はルートルートとユーザー選択画面のルートファイルにだけ許可する
