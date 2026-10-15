@@ -47,7 +47,7 @@
   - _Requirements: 1.3, 2.1, 2.2, 2.3_
 
 - [ ] 3. 永続化基盤
-- [ ] 3.1 SQLite 接続とマイグレーション適用
+- [x] 3.1 SQLite 接続とマイグレーション適用
   - DB パスを環境変数（未設定なら既定のパス）から解決し、外部キー制約と WAL を有効にして接続する。開発サーバーの再読み込みで接続が増えないよう、共有接続をプロセス内に 1 つだけ保持する
   - 作成を許可しない接続では DB ファイルの存在を確認し、ファイルなし・接続失敗を理由付きのエラーとして投げる。エラーは DB パス・理由・対処（データ初期化手順の実行）を含み、サーバーログにも出力する
   - コミット済みのマイグレーションを順に適用し、適用済みはスキップする処理を作る
@@ -160,3 +160,4 @@
 - Node.js 24 は `.node-version` を mise が読んで解決する（マシン既定は Node 20）。npm は safe-chain の公開経過日数フィルタ付きのため、最新版が見えないことがある。
 - Prettier は `.claude/`・`.kiro/`・`CLAUDE.md` を対象外にしている（ツール管理の Markdown を書き換えないため）。
 - Playwright の webServer は `reuseExistingServer: false`。`npm run test:e2e` の前にポート 3000 を空けておく。テストが 0 件の間は `npm run test` が exit 1 になる。
+- `AppDatabase` は design の `BetterSQLite3Database` に `$client` を足した型（drizzle() の戻り値そのもの）。接続を閉じるために使う。DB パスとマイグレーションの場所は `process.cwd()` 基準。
