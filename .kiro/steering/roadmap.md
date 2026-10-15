@@ -3,7 +3,7 @@
 ## Overview
 作業者が自分の領収書を登録し、複数の領収書をまとめて経費精算を申請する。申請時に指定された承認者が承認すると精算完了となる、経費精算 Web アプリを構築する。
 
-Next.js (App Router) によるフルスタック構成で、認証は持たず簡易的なユーザー切替でアクター（作業者／承認者）を表現する。ドメインの核である「申請の状態遷移」を独立した spec に閉じ込め、その上下に土台（ユーザー・基盤）と領収書管理を配置する。
+TanStack Start（React）によるフルスタック構成で、認証は持たず簡易的なユーザー切替でアクター（作業者／承認者）を表現する。ドメインの核である「申請の状態遷移」を独立した spec に閉じ込め、その上下に土台（ユーザー・基盤）と領収書管理を配置する。
 
 ## Approach Decision
 - **Chosen**: 3 spec 分割（app-foundation → receipt-management → expense-claim-workflow）
@@ -27,7 +27,7 @@ Next.js (App Router) によるフルスタック構成で、認証は持たず�
   - 通知（メール・Slack 等）
 
 ## Constraints
-- Next.js (App Router) + TypeScript のフルスタック単一リポジトリ
+- TanStack Start（React）+ TypeScript のフルスタック単一リポジトリ
 - 永続化は RDB（ローカル開発は SQLite 想定）。ORM の選定は app-foundation の design で行う
 - Spec-Driven Development の実験プロジェクトであり、健全で見通しのよい設計を速度より優先する
 
@@ -39,6 +39,6 @@ Next.js (App Router) によるフルスタック構成で、認証は持たず�
   - 承認者候補の一覧（app-foundation のユーザー／ロール情報を workflow が参照）
 
 ## Specs (dependency order)
-- [ ] app-foundation -- Next.js 基盤、DB/ORM、ユーザーとロール（作業者／承認者）の簡易切替. Dependencies: none
+- [ ] app-foundation -- TanStack Start 基盤、DB/ORM、ユーザーとロール（作業者／承認者）の簡易切替. Dependencies: none
 - [ ] receipt-management -- 作業者による自分の領収書の登録・編集・削除・一覧. Dependencies: app-foundation
 - [ ] expense-claim-workflow -- 複数領収書の申請、承認者指定、承認／差し戻し／再申請と状態遷移. Dependencies: app-foundation, receipt-management
