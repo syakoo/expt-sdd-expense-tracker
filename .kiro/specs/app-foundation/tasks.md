@@ -11,7 +11,7 @@
   - `npm run dev` で http://localhost:3000 に Tailwind のスタイルが当たった仮のトップ画面が表示され、`/select-user` も仮の画面が表示され、`npm run typecheck` と `npm run build` が成功する
   - _Requirements: 1.1_
 
-- [ ] 1.2 Lint と整形の構成
+- [x] 1.2 Lint と整形の構成
   - ESLint の flat config に typescript-eslint、React Hooks、TanStack Router のルールと、整形系ルールを無効化する設定を入れる
   - Prettier を Tailwind のクラス並び替えプラグイン付きで構成し、自動生成ルート定義・マイグレーション・DB 置き場を整形対象から外す
   - `lint` / `format` / `format:check` スクリプトを定義する
