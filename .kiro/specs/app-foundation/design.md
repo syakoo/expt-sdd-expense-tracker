@@ -215,7 +215,7 @@ data/.gitkeep                       # SQLite ファイルの置き場（DB フ�
 scripts/
 └── db-setup.ts                     # データ初期化手順：DB ファイル作成 → マイグレーション適用 → シード投入
 src/
-├── router.tsx                      # getRouter()：createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0 })
+├── router.tsx                      # getRouter()：createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0, defaultErrorComponent, defaultNotFoundComponent })
 ├── routeTree.gen.ts                # ルート定義から自動生成（コミット対象、Lint と Prettier の対象外）
 ├── styles.css                      # Tailwind の読み込み
 ├── db/
@@ -239,6 +239,8 @@ src/
 │       ├── current-user-indicator.tsx  # 現在ユーザーの表示名・ロールと切替リンク
 │       └── user-select-list.tsx        # 全ユーザー一覧と選択ボタン
 └── routes/
+    ├── -components/
+    │   └── route-error.tsx         # RouteError / RouteNotFound：日本語のエラー・未検出表示（ルート生成の対象外）
     ├── __root.tsx                  # shellComponent でドキュメント、component でヘッダー（アプリ名 + CurrentUserIndicator）と <main>、エラー表示。beforeLoad で現在ユーザーを取得
     ├── select-user.tsx             # ユーザー選択画面（ゲートの外）
     ├── _app.tsx                    # パスなしレイアウト：未選択なら /select-user へリダイレクト、コンテキストに user を入れる
@@ -273,6 +275,7 @@ e2e/
 - サーバー側のロジック（問い合わせ、検証、権限の判断）は、`db: AppDatabase` と `user: User` を引数で受け取る普通の関数として `*.server.ts` に置く。`getDb()` と `requireCurrentUser()` を呼ぶのは `*.functions.ts` のハンドラだけにする。identity の `current-user.server.ts` と `current-user.functions.ts` の分け方と同じで、ロジックを Vitest から in-memory DB と任意のユーザーで検証できる
 - テストでは `createTestDatabase()` で DB を用意し、`seedUsers(db)` でユーザーを投入してから `SEED_USERS` の ID を外部キーに使う。この 2 つの import は `*.test.{ts,tsx}` からだけ許可される
 - コンポーネントのテストは `*.test.tsx` とする。DOM が必要なテストはファイル先頭の `// @vitest-environment` コメントで環境を指定し、必要な依存（jsdom 等）は後続 spec が追加する
+- 機能画面のローダーやコンポーネントで起きたエラーは、ルーターの `defaultErrorComponent`（`RouteError`）が共通レイアウトの `<main>` の中に表示する。ヘッダーと切替操作は残る。画面固有の表示が必要なときだけ、そのルートに `errorComponent` を置く。データが見つからないときは `throw notFound()` を使う
 - ディレクトリをまたぐ import は `@/` エイリアスで書く。`../` は Lint で禁止される
 - 機能ごとのテーブル定義は `src/<feature>/schema.ts` に置く。`drizzle.config.ts` のグロブが拾うため、本 spec のファイルを変更せずに追加できる
 - ユーザーを参照する外部キー列は `text(...).references(() => users.id).$type<UserId>()` とする
@@ -371,7 +374,7 @@ graph LR
 | 1.3 | 順序付きの変更履歴と再現性 | drizzle.config.ts、`drizzle/`、MigrationRunner | `applyMigrations(db)` | データ初期化 |
 | 1.4 | 初期化でスキーマ最新化＋シード投入 | DbSetupScript、MigrationRunner、SeedUsers | `npm run db:setup` | データ初期化 |
 | 1.5 | 初期化を繰り返しても重複なし・同一識別 | SeedUsers（固定 ID の upsert） | `seedUsers(db)` | データ初期化 |
-| 1.6 | 保存先に接続できないとき原因を出力し描画しない | DbClient、DbSetupScript、RootRoute（errorComponent） | `DatabaseUnavailableError` | データ初期化 |
+| 1.6 | 保存先に接続できないとき原因を出力し描画しない | DbClient、DbSetupScript、RootRoute（errorComponent）、RouteError | `DatabaseUnavailableError` | データ初期化 |
 | 2.1 | 一意の識別子と表示名 | IdentitySchema、IdentityTypes | `User` | — |
 | 2.2 | ロールは作業者・承認者の 2 種のみ | IdentityTypes、IdentitySchema（CHECK 制約） | `Role`、`ROLES` | — |
 | 2.3 | 1 つ以上のロール、両方の保持を許容 | IdentitySchema（複合主キー）、IdentityTypes（非空タプル）、UserRepository | `User.roles` | — |
@@ -393,7 +396,7 @@ graph LR
 | 4.5 | 一覧は毎回同じ順序 | UserRepository（`users.id` 昇順） | `findUsers(db, { role })` | — |
 | 4.6 | 保持方法を利用側に露出しない | IdentityPublicApi、CurrentUserStore、ESLint 境界、インポート保護 | — | — |
 | 4.7 | 操作可否の判定を返さない | IdentityPublicApi（ロールのみ返す） | `User` | — |
-| 5.1 | 全画面にアプリ名・現在ユーザー表示・切替操作 | RootRoute、CurrentUserIndicator | — | — |
+| 5.1 | 全画面にアプリ名・現在ユーザー表示・切替操作 | RootRoute、CurrentUserIndicator、Router（defaultErrorComponent） | — | — |
 | 5.2 | 後続機能の画面にも同じ共通レイアウト | RootRoute、AppLayout、`src/routes/_app/` 配置規約 | — | — |
 | 5.3 | トップ画面に表示名とロール | TopPage | `_app` コンテキスト `user` | — |
 | 5.4 | キーボード操作可能、支援技術で読み取り可能 | RootRoute、CurrentUserIndicator、UserSelectList | — | — |
@@ -847,9 +850,11 @@ export function seedUsers(db: AppDatabase): void;
     - ルートルートの `beforeLoad` が失敗しても描画されるため、エラー表示にもスタイルとスクリプトが届く
     - 現在ユーザーに依存するものを置かない
   - `component`（レイアウト）：`<header>` にアプリ名（`<Link to="/">` 経費精算）と `CurrentUserIndicator`、続けて `<main>` の中に `<Outlet />`。すべてのルートに適用される。フォーカスリングを消さない
-  - `errorComponent`: シェルの中に、`component` の代わりに描画される。「データを読み込めませんでした」と表示する。開発時（`import.meta.env.DEV`）は `error.message` も表示する。メッセージには `DatabaseUnavailableError` のパスと対処が含まれる。ヘッダーを含め、部分的なデータで画面を描画しない
+  - `errorComponent`: `RouteError`。ルートルート自身（`beforeLoad` など）のエラーのときに、シェルの中で `component` の代わりに描画される。ヘッダーを含め、部分的なデータで画面を描画しない
+    - TanStack Router のエラー境界はルートごとにあり、子ルートのエラーはここに届かない。子ルートのエラーはルーターの `defaultErrorComponent` が受け持つ（Router 参照）
+    - 現在ユーザーの取得は全ナビゲーションでここの `beforeLoad` を通るため、DB 接続の失敗（1.6）はここで表示される
   - `shellComponent` の API 名と振る舞いは、実装時に TanStack Start 1.169 で確認する
-  - `notFoundComponent`: 「ページが見つかりません」とトップへのリンク
+  - `notFoundComponent`: `RouteNotFound`
 - **AppLayout**（`_app.tsx`。3.1, 5.2）
   - `beforeLoad`: `context.currentUser.status === 'none'` なら `throw redirect({ to: '/select-user' })`。そうでなければ `return { user: context.currentUser.user }`
   - 子ルートのコンテキストに `user: User` が入る
@@ -860,9 +865,13 @@ export function seedUsers(db: AppDatabase): void;
   - `loader`: `listAllUsers()`
   - 見出し「ユーザーを選択」と `UserSelectList` を表示する。`currentUserId` はコンテキストの `currentUser` から渡す
 - **Router**（`src/router.tsx`）
-  - `getRouter()` で `createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0 })` を返す
+  - `getRouter()` で `createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0, defaultErrorComponent: RouteError, defaultNotFoundComponent: RouteNotFound })` を返す
   - キャッシュ設定の理由は System Flows の Key Decisions を参照（前のユーザーのデータを表示しないため）
-  - 既定のエラー表示はルートルートの `errorComponent` に任せる
+  - `defaultErrorComponent` / `defaultNotFoundComponent` は、`errorComponent` / `notFoundComponent` を持たない子ルートで使われる。設定しないと組み込みの英語表示（「Something went wrong!」）になる。子ルートのエラーは共通レイアウトの `<main>` の中に表示され、ヘッダーと切替操作は残る（5.1）
+- **RouteError / RouteNotFound**（`routes/-components/route-error.tsx`）
+  - `-` で始まるディレクトリは TanStack Router のルート生成の対象外
+  - `RouteError`：「データを読み込めませんでした」と表示する。開発時（`import.meta.env.DEV`）は `error.message` も表示する。`DatabaseUnavailableError` のメッセージには DB パスと対処が含まれる
+  - `RouteNotFound`：「ページが見つかりません」とトップへのリンク
 
 ## Data Models
 
