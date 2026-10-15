@@ -77,6 +77,10 @@
   - `@/identity`：取得口と型（すべての用途）
   - `@/identity/schema`：外部キー参照（`users.id`）のためだけ
   - `@/db/client.server`：自機能のテーブルへのクエリのため（サーバー専用ファイルからのみ）
+- **テストファイル（`**/*.test.ts`）にだけ追加で許可する import**:
+  - `@/db/test-utils.server`：`createTestDatabase()` で in-memory DB を用意するため
+  - `@/identity/seed.server`：`SEED_USERS` と `seedUsers(db)` で外部キー先のユーザーを用意するため
+  - 許可はファイルの命名で判定し、ディレクトリでは判定しない。テストを置く場所が増えても ESLint の設定を変えずに済む
 - **後続 spec に禁止する import**:
   - 上記以外の `@/identity/*` と `@/db/*`（`current-user-store.server`、`user-repository.server`、`select-user.functions` 等）
   - ESLint の `no-restricted-imports` で機械的に検出する
@@ -89,6 +93,8 @@
   - 型 `User` / `Role` / `UserId` / `CurrentUserResult`
   - `_app` ルートのコンテキスト（`user`）
 - `users.id` の型・採番方式の変更、シードユーザー ID の変更。後続 spec の外部キーとテストに影響する
+- テスト用 API（`createTestDatabase()`、`SEED_USERS`、`seedUsers(db)`）の入力・出力、およびテストファイルに許可する import の範囲
+- ルーターのキャッシュ設定（`defaultPreload` / `defaultGcTime`）の変更。後続 spec の画面が前のユーザーのデータを表示しないことの前提になる
 - ユーザー選択画面のパス（`/select-user`）や、`src/routes/_app/` 配下に機能画面を置く規約の変更
 - スキーマの配置規約（`src/*/schema.ts`）やマイグレーション適用方式の変更
 - Node.js の前提バージョン、Drizzle ORM のメジャー更新（1.0 移行）、TanStack Start のメジャー更新
@@ -206,7 +212,7 @@ data/.gitkeep                       # SQLite ファイルの置き場（DB フ�
 scripts/
 └── db-setup.ts                     # データ初期化手順：DB ファイル作成 → マイグレーション適用 → シード投入
 src/
-├── router.tsx                      # getRouter()：createRouter({ routeTree, scrollRestoration: true, defaultPreload: 'intent' })
+├── router.tsx                      # getRouter()：createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0 })
 ├── routeTree.gen.ts                # ルート定義から自動生成（コミット対象、Lint と Prettier の対象外）
 ├── styles.css                      # Tailwind の読み込み
 ├── db/
@@ -230,7 +236,7 @@ src/
 │       ├── current-user-indicator.tsx  # 現在ユーザーの表示名・ロールと切替リンク
 │       └── user-select-list.tsx        # 全ユーザー一覧と選択ボタン
 └── routes/
-    ├── __root.tsx                  # ドキュメント、ヘッダー（アプリ名 + CurrentUserIndicator）、<main>、エラー表示。beforeLoad で現在ユーザーを取得
+    ├── __root.tsx                  # shellComponent でドキュメント、component でヘッダー（アプリ名 + CurrentUserIndicator）と <main>、エラー表示。beforeLoad で現在ユーザーを取得
     ├── select-user.tsx             # ユーザー選択画面（ゲートの外）
     ├── _app.tsx                    # パスなしレイアウト：未選択なら /select-user へリダイレクト、コンテキストに user を入れる
     └── _app/
@@ -261,6 +267,8 @@ e2e/
 - 機能画面は `src/routes/_app/` 配下に置く。ルートルートの共通レイアウトと `_app` のゲートが自動で適用される（5.2）
 - 画面から現在ユーザーを使うときは、`_app` のコンテキストの `user`（`Route.useRouteContext()`、ローダーの `context.user`）を使う。これは同じナビゲーションで `getCurrentUser` が返した値である
 - 自機能の Server Function でデータを返す・変更するときは、ハンドラの先頭で `await requireCurrentUser()` を呼んで認可の材料にする。`beforeLoad` のゲートは表示の保護であり、データの保護ではない
+- サーバー側のロジック（問い合わせ、検証、権限の判断）は、`db: AppDatabase` と `user: User` を引数で受け取る普通の関数として `*.server.ts` に置く。`getDb()` と `requireCurrentUser()` を呼ぶのは `*.functions.ts` のハンドラだけにする。identity の `current-user.server.ts` と `current-user.functions.ts` の分け方と同じで、ロジックを Vitest から in-memory DB と任意のユーザーで検証できる
+- テストでは `createTestDatabase()` で DB を用意し、`seedUsers(db)` でユーザーを投入してから `SEED_USERS` の ID を外部キーに使う。この 2 つの import は `*.test.ts` からだけ許可される
 - 機能ごとのテーブル定義は `src/<feature>/schema.ts` に置く。`drizzle.config.ts` のグロブが拾うため、本 spec のファイルを変更せずに追加できる
 - ユーザーを参照する外部キー列は `text(...).references(() => users.id).$type<UserId>()` とする
 - サーバー専用のファイル（DB アクセスなど）は `*.server.ts`、Server Function の定義は `*.functions.ts` と命名する
@@ -322,7 +330,11 @@ sequenceDiagram
 
 **Key Decisions**:
 - 現在ユーザーはルートルートの `beforeLoad` で 1 回だけ取得し、ルーターコンテキストで子ルートへ渡す。ヘッダー（全画面、3.4）とゲート（3.1）が同じ結果を使う
-- `beforeLoad` は初回表示ではサーバー、クライアント遷移ではブラウザで動く。ブラウザでは `getCurrentUser` が RPC になる。遷移のたびに再評価されるため、別のタブで切り替えた結果も次の遷移で反映される
+- `beforeLoad` は初回表示ではサーバー、クライアント遷移ではブラウザで動く。ブラウザでは `getCurrentUser` が RPC になる。遷移のたびに再評価されるため、別のタブで切り替えた結果も次の遷移でヘッダーとゲートに反映される
+- ローダーのデータについては、ルーターのキャッシュのキーに現在ユーザーが含まれない。キャッシュが残っていると、別のタブで切り替えた後の遷移で、ヘッダーは新しいユーザー、本文は前のユーザーのデータ、という状態になりうる。これを防ぐため、ルーターで次の 2 つを設定し、ローダーのデータを遷移をまたいで再利用しない
+  - `defaultPreload: false`：ホバー時の先読みをしない
+  - `defaultGcTime: 0`：表示中でないルートのデータをすぐ捨てる。再訪時はローダーを実行し直し、その完了を待って表示する
+  - 代償として、遷移のたびにローダーの RPC が走る。ローカルで動かす小規模なアプリなので許容する
 - ゲートは `_app` パスなしレイアウトに置く。
   - `/select-user` はゲートの外にあり、未選択でも表示できる
   - 切替時もヘッダーのリンクから同じ画面へ移り、同じ Server Function で上書きする（3.5）
@@ -464,6 +476,14 @@ export function resolveDatabasePath(): string;
 **Implementation Notes**
 - `DatabaseUnavailableError` のメッセージには DB パス、理由、対処（`npm run db:setup`）を含める。投げる前に `console.error` でサーバーログへ出力する
 - Risk: `__drizzle_migrations` の存在確認では「未適用の新しいマイグレーション」までは検出しない。新しいマイグレーションを取り込んだら `npm run db:setup` を再実行する手順を README に書く
+
+##### テスト用ユーティリティ（`src/db/test-utils.server.ts`）
+```typescript
+/** in-memory SQLite を開き、drizzle/ の全マイグレーションを適用して返す。テストごとに独立した DB になる。 */
+export function createTestDatabase(): AppDatabase;
+```
+- identity と後続 spec のテストで共用する。`*.test.ts` からだけ import を許可する
+- 全機能のマイグレーションを適用するため、後続 spec のテーブルもそのまま使える
 
 #### MigrationRunner
 
@@ -737,6 +757,7 @@ export type { Role, UserId, User, CurrentUserResult } from './types';
   - `@/identity/*` を禁止する。ただし `@/identity/schema` は許可する
   - `@/identity/ui` は `src/routes/__root.tsx` と `src/routes/select-user.tsx` だけに許可する
   - `@/db/*` を禁止する。ただし `@/db/client.server` は許可する
+  - `**/*.test.ts` 向けの設定ブロックを別に置き、上記に加えて `@/db/test-utils.server` と `@/identity/seed.server` を許可する。`files` のグロブで判定するため、テストの置き場所には依存しない
 - サーバー専用ファイル（`*.server.ts`）はインポート保護の対象になり、クライアントバンドルから到達すると `vite build` が失敗する
 
 #### SeedUsers（`seed.server.ts`）
@@ -770,6 +791,7 @@ export function seedUsers(db: AppDatabase): void;
   - そのユーザーの `user_roles` を削除し、定義どおりに入れ直す
 - シードにないユーザーは削除しない。作成経路がないため存在しない想定であり、後続 spec の外部キーを壊さないため
 - シード ID は後続 spec のテストからも参照されるため、変更は再検証トリガー
+- 後続 spec のテストは `*.test.ts` から `SEED_USERS` と `seedUsers(db)` を import してよい（Allowed Dependencies 参照）。アプリのコードからは import しない
 
 ### identity/ui（アプリシェル専用）
 
@@ -800,9 +822,12 @@ export function seedUsers(db: AppDatabase): void;
   - `beforeLoad`: `return { currentUser: await getCurrentUser() }`。子ルートのコンテキストに `currentUser: CurrentUserResult` が入る
   - `headers`: `{ 'Cache-Control': 'private, no-store' }`
   - `head`: 文字コード、viewport、タイトル「経費精算」、`styles.css` へのリンク
-  - ドキュメント：`<html lang="ja">`。`<head>` に `<HeadContent />`、`<body>` の末尾に `<Scripts />`
-  - レイアウト：`<header>` にアプリ名（`<Link to="/">` 経費精算）と `CurrentUserIndicator`、続けて `<main>` の中に `<Outlet />`。すべてのルートに適用される。フォーカスリングを消さない
-  - `errorComponent`: 「データを読み込めませんでした」と表示する。開発時（`import.meta.env.DEV`）は `error.message` も表示する。メッセージには `DatabaseUnavailableError` のパスと対処が含まれる。ヘッダーを含め、部分的なデータで画面を描画しない
+  - `shellComponent`（ドキュメント）：`<html lang="ja">`。`<head>` に `<HeadContent />`、`<body>` の中に `children`、末尾に `<Scripts />`
+    - ルートルートの `beforeLoad` が失敗しても描画されるため、エラー表示にもスタイルとスクリプトが届く
+    - 現在ユーザーに依存するものを置かない
+  - `component`（レイアウト）：`<header>` にアプリ名（`<Link to="/">` 経費精算）と `CurrentUserIndicator`、続けて `<main>` の中に `<Outlet />`。すべてのルートに適用される。フォーカスリングを消さない
+  - `errorComponent`: シェルの中に、`component` の代わりに描画される。「データを読み込めませんでした」と表示する。開発時（`import.meta.env.DEV`）は `error.message` も表示する。メッセージには `DatabaseUnavailableError` のパスと対処が含まれる。ヘッダーを含め、部分的なデータで画面を描画しない
+  - `shellComponent` の API 名と振る舞いは、実装時に TanStack Start 1.169 で確認する
   - `notFoundComponent`: 「ページが見つかりません」とトップへのリンク
 - **AppLayout**（`_app.tsx`。3.1, 5.2）
   - `beforeLoad`: `context.currentUser.status === 'none'` なら `throw redirect({ to: '/select-user' })`。そうでなければ `return { user: context.currentUser.user }`
@@ -814,7 +839,8 @@ export function seedUsers(db: AppDatabase): void;
   - `loader`: `listAllUsers()`
   - 見出し「ユーザーを選択」と `UserSelectList` を表示する。`currentUserId` はコンテキストの `currentUser` から渡す
 - **Router**（`src/router.tsx`）
-  - `getRouter()` で `createRouter({ routeTree, scrollRestoration: true, defaultPreload: 'intent' })` を返す
+  - `getRouter()` で `createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0 })` を返す
+  - キャッシュ設定の理由は System Flows の Key Decisions を参照（前のユーザーのデータを表示しないため）
   - 既定のエラー表示はルートルートの `errorComponent` に任せる
 
 ## Data Models
@@ -862,7 +888,7 @@ erDiagram
 - **DB 接続・スキーマ未適用（1.6）**:
   - `DbClient` が `DatabaseUnavailableError` を投げる
   - リポジトリと Server Function は握りつぶさずに伝播させる。Server Function から投げられたエラーは呼び出し元へシリアライズされる
-  - ルートルートの `beforeLoad` で失敗した場合は `errorComponent` が表示され、画面本体とヘッダーは描画されない
+  - ルートルートの `beforeLoad` で失敗した場合は、`shellComponent` の中に `errorComponent` が表示され、画面本体とヘッダーは描画されない
   - 未選択（`status: 'none'`）とは決して混同しない
 - **初期化スクリプトの失敗**: DB パスと原因を標準エラーに出し、終了コード 1
 - **不正・不明なユーザー ID**:
@@ -921,6 +947,7 @@ Server Function のラッパー（`*.functions.ts`）とルートは薄い接続
   - 再読み込み後も同じユーザーが表示されること（3.7）
   - ヘッダーの「ユーザーを切り替える」から `伊藤 直樹` を選ぶと、ヘッダーとトップ画面の表示が「作業者・承認者」に変わること。クライアント遷移で古い表示が残らないことも確かめる（3.5）
   - 2 つのブラウザコンテキストで別々のユーザーを選び、互いに影響しないこと（3.8）
+  - 同じブラウザコンテキストの 2 つのタブで、タブ B でユーザーを切り替えた後、タブ A でトップ画面へ遷移すると、ヘッダーとトップ画面の両方が新しいユーザーの表示になること（3.5）
   - `current_user_id=unknown` の Cookie を設定して `/` にアクセスすると `/select-user` に遷移すること（3.9）
 - `e2e/layout-accessibility.spec.ts`
   - `/select-user` と `/` の両方でヘッダーにアプリ名と切替リンクがあること（5.1）
@@ -931,8 +958,10 @@ Server Function のラッパー（`*.functions.ts`）とルートは薄い接続
 タスク完了時に手動で確認する（CI では行わない）。
 
 - 空の `DATABASE_PATH` に対して `npm run db:setup` を 2 回実行し、両方とも成功すること（1.4, 1.5）
+- 存在しない `DATABASE_PATH` で `npm run dev` を起動して `/` を開くと、スタイルが当たったエラー画面に DB パスと `npm run db:setup` の案内が表示され、ヘッダーが表示されないこと（1.6）
 - `npm run build` が成功すること。インポート保護の違反がないことの確認を兼ねる（4.6）
 - `npm run lint` が `@/identity` 内部への import を検出すること（4.6）。一時ファイルで ESLint ルールを試して確かめる
+  - あわせて、`*.test.ts` からの `@/db/test-utils.server` と `@/identity/seed.server` の import は検出されず、それ以外のファイルからは検出されることを確かめる
 - `npm run typecheck` と `npm run format:check` が成功すること
 - 2.5 と 5.2 はルート構成のレビューで確認する
   - ユーザー編集用のルートがないこと
