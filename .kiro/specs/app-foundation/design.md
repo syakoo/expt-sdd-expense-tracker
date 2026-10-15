@@ -77,7 +77,7 @@
   - `@/identity`：取得口と型（すべての用途）
   - `@/identity/schema`：外部キー参照（`users.id`）のためだけ
   - `@/db/client.server`：自機能のテーブルへのクエリのため（サーバー専用ファイルからのみ）
-- **テストファイル（`**/*.test.ts`）にだけ追加で許可する import**:
+- **テストファイル（`**/*.test.{ts,tsx}`）にだけ追加で許可する import**:
   - `@/db/test-utils.server`：`createTestDatabase()` で in-memory DB を用意するため
   - `@/identity/seed.server`：`SEED_USERS` と `seedUsers(db)` で外部キー先のユーザーを用意するため
   - 許可はファイルの命名で判定し、ディレクトリでは判定しない。テストを置く場所が増えても ESLint の設定を変えずに済む
@@ -85,6 +85,9 @@
   - 上記以外の `@/identity/*` と `@/db/*`（`current-user-store.server`、`user-repository.server`、`select-user.functions` 等）
   - ESLint の `no-restricted-imports` で機械的に検出する
   - `@/identity/ui` はアプリシェル（`src/routes/__root.tsx`、`src/routes/select-user.tsx`）専用
+- **相対 import は `./`（同じディレクトリとその配下）だけに限る**:
+  - `../` で始まる import は `src/` 全体で禁止する。ディレクトリをまたぐ import は必ず `@/` エイリアスで書く
+  - これにより、モジュールの内部へ届く経路がエイリアスの形だけになり、上記の制限を相対パスで迂回できない
 - `identity` と `db` は後続 spec のモジュールを import しない
 
 ### Revalidation Triggers
@@ -204,7 +207,7 @@ eslint.config.js                    # typescript-eslint + react-hooks + TanStack
 .prettierrc.json                    # Prettier 設定（prettier-plugin-tailwindcss）
 .prettierignore                     # src/routeTree.gen.ts、drizzle/、data/ など生成物
 drizzle.config.ts                   # dialect: sqlite、schema: ./src/*/schema.ts、out: ./drizzle
-vitest.config.ts                    # environment: node、resolve.tsconfigPaths、include: src/**/*.test.ts
+vitest.config.ts                    # environment: node、resolve.tsconfigPaths、include: src/**/*.test.{ts,tsx}
 playwright.config.ts                # webServer: E2E 用 DB で db:setup → dev
 .gitignore                          # data/*.db*、node_modules、dist、.tanstack、test-results 等
 drizzle/                            # drizzle-kit generate が出力する SQL マイグレーションと meta（コミット対象）
@@ -268,12 +271,14 @@ e2e/
 - 画面から現在ユーザーを使うときは、`_app` のコンテキストの `user`（`Route.useRouteContext()`、ローダーの `context.user`）を使う。これは同じナビゲーションで `getCurrentUser` が返した値である
 - 自機能の Server Function でデータを返す・変更するときは、ハンドラの先頭で `await requireCurrentUser()` を呼んで認可の材料にする。`beforeLoad` のゲートは表示の保護であり、データの保護ではない
 - サーバー側のロジック（問い合わせ、検証、権限の判断）は、`db: AppDatabase` と `user: User` を引数で受け取る普通の関数として `*.server.ts` に置く。`getDb()` と `requireCurrentUser()` を呼ぶのは `*.functions.ts` のハンドラだけにする。identity の `current-user.server.ts` と `current-user.functions.ts` の分け方と同じで、ロジックを Vitest から in-memory DB と任意のユーザーで検証できる
-- テストでは `createTestDatabase()` で DB を用意し、`seedUsers(db)` でユーザーを投入してから `SEED_USERS` の ID を外部キーに使う。この 2 つの import は `*.test.ts` からだけ許可される
+- テストでは `createTestDatabase()` で DB を用意し、`seedUsers(db)` でユーザーを投入してから `SEED_USERS` の ID を外部キーに使う。この 2 つの import は `*.test.{ts,tsx}` からだけ許可される
+- コンポーネントのテストは `*.test.tsx` とする。DOM が必要なテストはファイル先頭の `// @vitest-environment` コメントで環境を指定し、必要な依存（jsdom 等）は後続 spec が追加する
+- ディレクトリをまたぐ import は `@/` エイリアスで書く。`../` は Lint で禁止される
 - 機能ごとのテーブル定義は `src/<feature>/schema.ts` に置く。`drizzle.config.ts` のグロブが拾うため、本 spec のファイルを変更せずに追加できる
 - ユーザーを参照する外部キー列は `text(...).references(() => users.id).$type<UserId>()` とする
 - サーバー専用のファイル（DB アクセスなど）は `*.server.ts`、Server Function の定義は `*.functions.ts` と命名する
 
-テストファイルは対象と同じディレクトリに `*.test.ts` として置く。
+テストファイルは対象と同じディレクトリに `*.test.ts`（コンポーネントは `*.test.tsx`）として置く。
 
 - `src/db/client.test.ts`
 - `src/identity/user-repository.test.ts`
@@ -433,7 +438,11 @@ graph LR
   - 存在しなければ `npm run db:setup` を促す `DatabaseUnavailableError` を投げる
   - DB ファイルの作成を許可するのは初期化スクリプトだけ
 - 接続時に `PRAGMA foreign_keys = ON` と `PRAGMA journal_mode = WAL` を設定する
-- 接続時にマイグレーション管理テーブル `__drizzle_migrations` の存在を確認する。なければ「マイグレーション未適用」として `DatabaseUnavailableError` を投げる
+- 接続時にマイグレーションの適用状態を確認し、最新でなければ `DatabaseUnavailableError` を投げる。
+  - マイグレーション管理テーブル `__drizzle_migrations` がなければ `migrations-not-applied`
+  - `drizzle/meta/_journal.json` の最後のエントリの `when` より、`__drizzle_migrations` の `created_at` の最大値が小さければ `migrations-pending`。後続 spec のマイグレーションを取り込んだ後に `npm run db:setup` を再実行し忘れた状態を、`no such table` のような SQLite のエラーではなく、対処のわかるエラーとして示すため
+  - drizzle の migrator も同じ比較で未適用を判定するため、`applyMigrations` が適用する対象と一致する
+  - 確認するのは `create: false` で開くとき（`getDb()` を含む）だけ。`create: true` は初期化スクリプトとテスト用で、開いた後にマイグレーションを適用するため確認しない
 - 開発サーバーのモジュール再読み込みで接続が増えないよう、接続を `globalThis` にキャッシュする
 - テーブル定義を import しない（`db` は機能モジュールに依存しない）
 - ファイル名を `*.server.ts` にし、クライアントからの import をビルドエラーにする
@@ -449,6 +458,7 @@ export type AppDatabase = BetterSQLite3Database;
 export type DatabaseUnavailableReason =
   | 'file-not-found'
   | 'migrations-not-applied'
+  | 'migrations-pending'
   | 'open-failed';
 
 export class DatabaseUnavailableError extends Error {
@@ -464,7 +474,11 @@ export class DatabaseUnavailableError extends Error {
 /** アプリ実行時の共有接続。初回呼び出しで接続し、以後は同じ接続を返す。 */
 export function getDb(): AppDatabase;
 
-/** 初期化スクリプトとテスト用：指定パス（':memory:' 可）に接続する。create=true ならファイルを作成する。 */
+/**
+ * 指定パス（':memory:' 可）に接続する。getDb() もこれを create=false で使う。
+ * create=true：ファイルを作成し、マイグレーションの適用状態を確認しない（初期化スクリプトとテスト用）。
+ * create=false：ファイルの存在とマイグレーションの適用状態を確認する。
+ */
 export function openDatabase(params: { path: string; create: boolean }): AppDatabase;
 
 export function resolveDatabasePath(): string;
@@ -475,14 +489,15 @@ export function resolveDatabasePath(): string;
 
 **Implementation Notes**
 - `DatabaseUnavailableError` のメッセージには DB パス、理由、対処（`npm run db:setup`）を含める。投げる前に `console.error` でサーバーログへ出力する
-- Risk: `__drizzle_migrations` の存在確認では「未適用の新しいマイグレーション」までは検出しない。新しいマイグレーションを取り込んだら `npm run db:setup` を再実行する手順を README に書く
+- `migrations-pending` の判定は `drizzle/meta/_journal.json` を実行時に読む。ローカル開発（プロジェクトルートで `vite dev`）だけを前提とするため、本番ビルドへの同梱は考えない
+- `_journal.json` と `__drizzle_migrations` の対応は drizzle-orm 0.45 の migrator の実装に依存する。Drizzle ORM のメジャー更新（1.0 移行）時に確認する（再検証トリガーに含まれる）
 
 ##### テスト用ユーティリティ（`src/db/test-utils.server.ts`）
 ```typescript
 /** in-memory SQLite を開き、drizzle/ の全マイグレーションを適用して返す。テストごとに独立した DB になる。 */
 export function createTestDatabase(): AppDatabase;
 ```
-- identity と後続 spec のテストで共用する。`*.test.ts` からだけ import を許可する
+- identity と後続 spec のテストで共用する。`*.test.{ts,tsx}` からだけ import を許可する
 - 全機能のマイグレーションを適用するため、後続 spec のテーブルもそのまま使える
 
 #### MigrationRunner
@@ -753,11 +768,17 @@ export type { Role, UserId, User, CurrentUserResult } from './types';
 - このファイルは Server Function の定義（`*.functions.ts`）と型だけを再エクスポートする。クライアントから import しても、サーバー専用コードはバンドルに入らない
 
 **Implementation Notes**
-- `eslint.config.js` の `no-restricted-imports` で次を制限する。`src/identity/` と `src/db/` の内部の相対 import は対象外
-  - `@/identity/*` を禁止する。ただし `@/identity/schema` は許可する
-  - `@/identity/ui` は `src/routes/__root.tsx` と `src/routes/select-user.tsx` だけに許可する
-  - `@/db/*` を禁止する。ただし `@/db/client.server` は許可する
-  - `**/*.test.ts` 向けの設定ブロックを別に置き、上記に加えて `@/db/test-utils.server` と `@/identity/seed.server` を許可する。`files` のグロブで判定するため、テストの置き場所には依存しない
+- `eslint.config.js` の `no-restricted-imports` で次を制限する
+  - `src/` の全ファイルで `../` で始まる import を禁止する（`group: ['../*']`）。ディレクトリをまたぐ import はエイリアスに統一され、以下の制限を相対パスで迂回できなくなる
+  - `src/identity/` と `src/db/` の外のファイルに対して：
+    - `@/identity/*` を禁止する。ただし `@/identity/schema` は許可する
+    - `@/identity/ui` は `src/routes/__root.tsx` と `src/routes/select-user.tsx` だけに許可する
+    - `@/db/*` を禁止する。ただし `@/db/client.server` は許可する
+  - `src/identity/` と `src/db/` の中では、上の階層のファイルも `@/identity/...`（例：`ui/` から `@/identity/select-user.functions`）のようにエイリアスで参照する。モジュール内部向けの制限はかからない
+  - `**/*.test.{ts,tsx}` 向けの設定ブロックを別に置き、上記に加えて `@/db/test-utils.server` と `@/identity/seed.server` を許可する。`files` のグロブで判定するため、テストの置き場所には依存しない
+- flat config では、同じルールを後のブロックで設定するとオプションが丸ごと置き換わる（マージされない）。
+  - 制限パターンの一覧を `eslint.config.js` 内の定数にして、各ブロックで必要な分を展開する
+  - テスト用のブロックでも `../` の禁止と `@/identity/*` の制限が残ることを Setup Verification で確かめる
 - サーバー専用ファイル（`*.server.ts`）はインポート保護の対象になり、クライアントバンドルから到達すると `vite build` が失敗する
 
 #### SeedUsers（`seed.server.ts`）
@@ -791,7 +812,7 @@ export function seedUsers(db: AppDatabase): void;
   - そのユーザーの `user_roles` を削除し、定義どおりに入れ直す
 - シードにないユーザーは削除しない。作成経路がないため存在しない想定であり、後続 spec の外部キーを壊さないため
 - シード ID は後続 spec のテストからも参照されるため、変更は再検証トリガー
-- 後続 spec のテストは `*.test.ts` から `SEED_USERS` と `seedUsers(db)` を import してよい（Allowed Dependencies 参照）。アプリのコードからは import しない
+- 後続 spec のテストは `*.test.{ts,tsx}` から `SEED_USERS` と `seedUsers(db)` を import してよい（Allowed Dependencies 参照）。アプリのコードからは import しない
 
 ### identity/ui（アプリシェル専用）
 
@@ -902,6 +923,7 @@ erDiagram
 |------|------|------|
 | DB ファイルがない | System | `DatabaseUnavailableError('file-not-found')`。メッセージで `npm run db:setup` を案内 |
 | マイグレーション未適用 | System | `DatabaseUnavailableError('migrations-not-applied')` |
+| 未適用の新しいマイグレーションがある | System | `DatabaseUnavailableError('migrations-pending')`。メッセージで `npm run db:setup` の再実行を案内 |
 | 接続・クエリ失敗 | System | `DatabaseUnavailableError('open-failed')`、または SQLite のエラーをそのまま伝播 |
 | Cookie のユーザーが存在しない | User state | 未選択として `/select-user` へ |
 | 選択操作で未知の ID | User input | Cookie を書かず、選択画面に `role="alert"` のメッセージ |
@@ -933,6 +955,7 @@ erDiagram
 - `src/db/client.test.ts`
   - 存在しないパスを `create: false` で開くと `reason: 'file-not-found'` の `DatabaseUnavailableError` になり、メッセージにパスを含むこと（1.6）
   - マイグレーション未適用の DB で `reason: 'migrations-not-applied'` になること（1.6）
+  - `__drizzle_migrations` の最新行を削除して「最後のマイグレーションが未適用」の状態にすると `reason: 'migrations-pending'` になり、`applyMigrations` の後は開けること（1.3, 1.6）
   - 一時ファイルに書き込み、接続を閉じて開き直しても読めること（1.2）
 
 Server Function のラッパー（`*.functions.ts`）とルートは薄い接続部分のため、Vitest では扱わず E2E で検証する。
@@ -961,7 +984,9 @@ Server Function のラッパー（`*.functions.ts`）とルートは薄い接続
 - 存在しない `DATABASE_PATH` で `npm run dev` を起動して `/` を開くと、スタイルが当たったエラー画面に DB パスと `npm run db:setup` の案内が表示され、ヘッダーが表示されないこと（1.6）
 - `npm run build` が成功すること。インポート保護の違反がないことの確認を兼ねる（4.6）
 - `npm run lint` が `@/identity` 内部への import を検出すること（4.6）。一時ファイルで ESLint ルールを試して確かめる
-  - あわせて、`*.test.ts` からの `@/db/test-utils.server` と `@/identity/seed.server` の import は検出されず、それ以外のファイルからは検出されることを確かめる
+  - 相対パス（例：`src/receipts/x.ts` から `../identity/current-user-store.server`）での迂回も `../` の禁止で検出されること
+  - あわせて、`*.test.ts` と `*.test.tsx` からの `@/db/test-utils.server` と `@/identity/seed.server` の import は検出されず、それ以外のファイルからは検出されることを確かめる
+  - テストファイルでも `../` の import と `@/identity/current-user-store.server` の import は検出されること（flat config の上書きで制限が消えていないこと）
 - `npm run typecheck` と `npm run format:check` が成功すること
 - 2.5 と 5.2 はルート構成のレビューで確認する
   - ユーザー編集用のルートがないこと
