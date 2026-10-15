@@ -7,7 +7,7 @@
 リポジトリはまっさらで、アプリケーションコードは存在しない。
 
 ## Desired Outcome
-- Next.js (App Router) + TypeScript のプロジェクトが起動し、DB に接続できる
+- TanStack Start + TypeScript のプロジェクトが起動し、DB に接続できる
 - ユーザー（作業者／承認者のロールを持つ）が定義され、画面上で操作ユーザーを簡易に切り替えられる
 - 他 spec が「現在のユーザー」と「ユーザー一覧（ロール別）」を単一のインターフェースで取得できる
 
@@ -36,5 +36,5 @@
 - **Adjacent**: receipt-management, expense-claim-workflow（現在ユーザー取得インターフェースの利用者）
 
 ## Constraints
-- Next.js (App Router) + TypeScript、SQLite（ローカル）
+- TanStack Start（React）+ TypeScript、SQLite（ローカル）
 - 将来本格認証に差し替えても利用側が変わらないよう、現在ユーザー取得の口を一つに絞る
