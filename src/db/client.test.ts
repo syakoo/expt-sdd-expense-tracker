@@ -1,11 +1,20 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import {
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import Database from 'better-sqlite3'
 import { sql } from 'drizzle-orm'
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DatabaseUnavailableError,
   getDb,
+  MIGRATIONS_FOLDER,
   openDatabase,
   resolveDatabasePath,
 } from './client.server'
@@ -79,6 +88,96 @@ describe('openDatabase', () => {
     db.$client.close()
   })
 
+  it('マイグレーション未適用の DB を create: false で開くと migrations-not-applied になり、接続を閉じる', () => {
+    const databasePath = path.join(tempDir, 'app.db')
+    openDatabase({ path: databasePath, create: true }).$client.close()
+    const closeSpy = vi.spyOn(Database.prototype, 'close')
+
+    let caught: unknown
+    try {
+      openDatabase({ path: databasePath, create: false })
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(DatabaseUnavailableError)
+    const error = caught as DatabaseUnavailableError
+    expect(error.reason).toBe('migrations-not-applied')
+    expect(error.message).toContain(databasePath)
+    expect(error.message).toContain('npm run db:setup')
+    expect(console.error).toHaveBeenCalledWith(error)
+    expect(closeSpy).toHaveBeenCalled()
+  })
+
+  it('最後のマイグレーションの適用記録がないと migrations-pending になり、applyMigrations の後は開ける', () => {
+    // 最後のエントリを除いたジャーナルで適用し、「新しいマイグレーションを取り込んだが未適用」の状態を作る
+    const olderMigrationsFolder = path.join(tempDir, 'drizzle-older')
+    cpSync(MIGRATIONS_FOLDER, olderMigrationsFolder, { recursive: true })
+    const journalPath = path.join(olderMigrationsFolder, 'meta/_journal.json')
+    const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as {
+      entries: unknown[]
+    }
+    writeFileSync(
+      journalPath,
+      JSON.stringify({ ...journal, entries: journal.entries.slice(0, -1) }),
+    )
+
+    const databasePath = path.join(tempDir, 'app.db')
+    const db = openDatabase({ path: databasePath, create: true })
+    migrate(db, { migrationsFolder: olderMigrationsFolder })
+    db.$client.close()
+
+    let caught: unknown
+    try {
+      openDatabase({ path: databasePath, create: false })
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(DatabaseUnavailableError)
+    const error = caught as DatabaseUnavailableError
+    expect(error.reason).toBe('migrations-pending')
+    expect(error.message).toContain(databasePath)
+    expect(error.message).toContain('npm run db:setup')
+    expect(console.error).toHaveBeenCalledWith(error)
+
+    const setup = openDatabase({ path: databasePath, create: true })
+    applyMigrations(setup)
+    setup.$client.close()
+
+    const reopened = openDatabase({ path: databasePath, create: false })
+    expect(reopened.all(sql`SELECT id FROM users`)).toEqual([])
+    reopened.$client.close()
+  })
+
+  it('適用記録が最後のコミット済みマイグレーションより古いと migrations-pending になる', () => {
+    const databasePath = path.join(tempDir, 'app.db')
+    const db = openDatabase({ path: databasePath, create: true })
+    applyMigrations(db)
+    db.run(sql`UPDATE __drizzle_migrations SET created_at = created_at - 1`)
+    db.$client.close()
+
+    let caught: unknown
+    try {
+      openDatabase({ path: databasePath, create: false })
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(DatabaseUnavailableError)
+    const error = caught as DatabaseUnavailableError
+    expect(error.reason).toBe('migrations-pending')
+    expect(error.message).toContain(databasePath)
+    expect(error.message).toContain('npm run db:setup')
+    expect(console.error).toHaveBeenCalledWith(error)
+  })
+
+  it('create: true ではマイグレーション未適用でも開ける', () => {
+    const db = openDatabase({ path: ':memory:', create: true })
+    expect(db.get(sql`SELECT 1 AS one`)).toEqual({ one: 1 })
+    db.$client.close()
+  })
+
   it('接続に失敗すると open-failed になり、メッセージにパスを含む', () => {
     // ディレクトリは存在するが SQLite ファイルとして開けない
     let caught: unknown
@@ -116,7 +215,9 @@ describe('getDb', () => {
   it('DATABASE_PATH の DB に接続し、2 回目以降は同じ接続を返す', () => {
     const databasePath = path.join(tempDir, 'shared.db')
     vi.stubEnv('DATABASE_PATH', databasePath)
-    openDatabase({ path: databasePath, create: true }).$client.close()
+    const setup = openDatabase({ path: databasePath, create: true })
+    applyMigrations(setup)
+    setup.$client.close()
 
     expect(resolveDatabasePath()).toBe(databasePath)
     const first = getDb()
