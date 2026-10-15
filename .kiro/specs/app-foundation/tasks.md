@@ -18,7 +18,7 @@
   - 1.1 の成果物に対して `npm run lint` と `npm run format:check` がエラーなしで終わる
   - _Requirements: 1.1_
 
-- [ ] 1.3 テスト基盤（Vitest と Playwright）の構成
+- [x] 1.3 テスト基盤（Vitest と Playwright）の構成
   - Vitest を Node 環境、パスエイリアス解決、`src` 配下の `*.test.ts` / `*.test.tsx` を対象として構成し、`test` スクリプトを定義する
   - Playwright を、E2E 専用の DB パスでデータ初期化手順を実行してから開発サーバーを起動する構成にし、`test:e2e` スクリプトを定義する（データ初期化スクリプト自体は 5.1 で作る）
   - Playwright のブラウザを導入する
@@ -155,3 +155,8 @@
   - ルート構成をレビューし、ユーザー編集用のルートがないこと、機能画面の配置先がゲート配下であることを確かめる
   - `npm run test`、`npm run test:e2e` を含む上記がすべて成功し、確認結果がプルリクエストの説明にチェックリストとして記録されている
   - _Requirements: 1.1, 1.4, 1.5, 1.6, 2.5, 4.6, 5.2_
+
+## Implementation Notes
+- Node.js 24 は `.node-version` を mise が読んで解決する（マシン既定は Node 20）。npm は safe-chain の公開経過日数フィルタ付きのため、最新版が見えないことがある。
+- Prettier は `.claude/`・`.kiro/`・`CLAUDE.md` を対象外にしている（ツール管理の Markdown を書き換えないため）。
+- Playwright の webServer は `reuseExistingServer: false`。`npm run test:e2e` の前にポート 3000 を空けておく。テストが 0 件の間は `npm run test` が exit 1 になる。
