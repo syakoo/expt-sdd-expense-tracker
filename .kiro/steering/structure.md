@@ -4,7 +4,7 @@
 
 機能ごとにまとめる（feature-first）。機能は `src/<feature>/` に置き、外へは入口ファイル（`index.ts`）で公開するものだけを見せる。内部の作りは import 境界で隠し、使う側が知る必要のあることを減らす。
 
-依存は一方向にする：`routes` → 機能モジュール（例：`identity`）→ `db`。`db` は機能を知らず、機能どうしは公開面だけを通して使う。
+依存は一方向にする：`routes` → 機能モジュール（例：`identity`）→ `db`。`db` は機能を知らず、機能どうしは公開面だけを通して使う。Lint が検出するのは他のモジュールの内部への import だけで、この向きそのものは慣習で守る。
 
 ## Directory Patterns
 
@@ -29,7 +29,7 @@
 
 ## Naming Conventions
 
-- **Files**: kebab-case（`current-user-indicator.tsx`）
+- **Files**: kebab-case（`current-user-indicator.tsx`）。ただしルートはファイルベースルーティングの記法に従う（`__root.tsx`、`_app.tsx`、`-components/`）。生成物の `routeTree.gen.ts` も例外
 - **サーバー専用**：`*.server.ts`。クライアントから import するとビルドエラーになる
 - **Server Function の定義**：`*.functions.ts`
 - **入力検証**：`validation.ts` に `parseXxxInput`
@@ -48,19 +48,21 @@ import { parseReceiptInput } from './validation'          // 同じディレク�
 **Path Aliases**:
 - `@/`：`src/` に対応する。ディレクトリをまたぐ import は必ずこれで書く（`../` は Lint で禁止）
 
-**境界のルール**（`eslint.config.js` が強制する。正確な定義はそちらを参照）:
+**境界のルール**（`src/` 配下のファイルに `eslint.config.js` が強制する。正確な定義はそちらを参照。`scripts/` と `e2e/` は対象外）:
 - `@/identity` の内部ファイルは import しない。使ってよいのは `@/identity` と `@/identity/schema`
 - `@/identity/ui` はアプリシェル（`__root.tsx`、`select-user.tsx`）専用
 - `@/db` は `client.server` だけを使う
-- `@/db/test-utils.server` と `@/identity/seed.server` はテストファイルからだけ使える
+- `@/db/test-utils.server` と `@/identity/seed.server` は、モジュールの外ではテストファイルからだけ使える
+- 機能モジュールどうしも互いの内部を import できない。新しい機能モジュールを足したら、内部の制限パターンを定義して `eslint.config.js` の `MODULE_BOUNDARIES` に追加する
 
 ## Code Organization Principles
 
-- **Server Function は薄くする**：`*.functions.ts` のハンドラが `getDb()` と `requireCurrentUser()` を呼び、`db: AppDatabase` と `user: User` を `*.server.ts` の普通の関数に渡す。問い合わせ・検証・権限の判断はその関数に置き、Vitest から in-memory DB と任意のユーザーでテストする
+- **Server Function は薄くする**：`getDb()` と `requireCurrentUser()` を呼ぶのは `*.functions.ts` のハンドラだけにする。ハンドラは `db: AppDatabase` と `user: User` を `*.server.ts` の普通の関数に渡す。問い合わせ・検証・権限の判断はその関数に置き、Vitest から in-memory DB と任意のユーザーでテストする
 - **データは Server Function で守る**：データを返す・変更する Server Function は、ハンドラの先頭で `await requireCurrentUser()` を呼ぶ。`_app` のゲートは画面の保護であって、データの保護ではない
+  - 例外は identity の `getCurrentUser` とユーザー一覧（`listUsersByRole` など）。ユーザー選択画面が未選択の状態で使うため、現在ユーザーを要求しない
 - **画面では現在ユーザーをコンテキストから取る**：`_app` 配下では `Route.useRouteContext()` やローダーの `context.user` を使い、取得し直さない
 - **エラー表示は共通のものに任せる**：ローダーやコンポーネントのエラーは、ルーターの既定のエラー表示が共通レイアウトの中に出す。画面固有の表示が必要なときだけ `errorComponent` を置く。データがないときは `throw notFound()`
-- **テストのデータ準備**：`createTestDatabase()` で DB を作り、`seedUsers(db)` でユーザーを入れてから `SEED_USERS` の ID を外部キーに使う
+- **テストのデータ準備**：`createTestDatabase()` で DB を作り、`seedUsers(db)` でユーザーを入れてから `SEED_USERS` の ID を外部キーに使う。使い終わったら `db.$client.close()` で閉じる
 
 ---
 _ファイルツリーではなくパターンを書く。パターンに沿った新しいファイルなら、ここを更新する必要はない_

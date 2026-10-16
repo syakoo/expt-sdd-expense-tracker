@@ -31,8 +31,10 @@ TanStack Start による単一リポジトリのフルスタック構成。画�
 
 ### Testing
 
-- **Vitest**：テストは対象と同じディレクトリに `*.test.ts(x)` として置く。DB を使うテストは in-memory SQLite にマイグレーションを適用して使う（`createTestDatabase()`）。テストごとに独立した DB になる
-- **Playwright**：ユーザーから見える流れ（選択・切替・画面遷移・アクセシビリティ）を E2E で確かめる。E2E 専用の DB ファイルを使い、開発用の DB は汚さない
+- **Vitest**：テストは対象と同じディレクトリに `*.test.ts(x)` として置く。DB を使うテストは in-memory SQLite にマイグレーションを適用して使う（`createTestDatabase()`）。テストごとに独立した DB になり、使い終わったら `db.$client.close()` で閉じる
+- **コンポーネントのテスト**：環境は `node`。今は `renderToString` で描画した HTML を検証している。DOM が必要になったら、ファイル先頭の `// @vitest-environment` で環境を指定し、jsdom などの依存はその spec が追加する
+- **Playwright**：ユーザーから見える流れ（選択・切替・画面遷移・アクセシビリティ）を `e2e/*.spec.ts` で確かめる。E2E 専用の DB ファイルを使い、開発用の DB は汚さない
+  - `npm run test:e2e` はポート 3000 で専用の開発サーバーを起動し、起動中のサーバーを再利用しない。動かしている開発サーバーは先に止める
 - ロジックは `db` と `user` を引数で受け取る関数に寄せ、Server Function を通さずにテストできるようにする
 
 ## Development Environment
@@ -52,11 +54,11 @@ npm run db:generate   # スキーマ変更からマイグレーションを生�
 ## Key Technical Decisions
 
 - **マイグレーションはコミットする**：`drizzle-kit generate` で生成した SQL を `drizzle/` にコミットし、`db:setup` で順に適用する。履歴が残らない `drizzle-kit push` は使わない
-- **未適用のマイグレーションがあれば起動時に止める**：DB が使えない状態では、原因と対処（`npm run db:setup`）を示すエラー画面を出す
+- **未適用のマイグレーションがあれば使わせない**：DB が使えない状態では、原因と対処（`npm run db:setup`）を示すエラー画面を出す。確認はプロセスで最初の接続時だけなので、開発サーバーを動かしたままマイグレーションを取り込んだら、`db:setup` の後に再起動する
 - **Drizzle ORM は 0.45 系に固定**：1.0 は RC のため。メジャー更新時は app-foundation の再検証トリガーに当たる
 - **TypeScript は 6.0 系**：typescript-eslint が 7 系に未対応のため
 - **ルーターはプリロードとキャッシュを無効化**（`defaultPreload: false`、`defaultGcTime: 0`）：ユーザー切替の直後に、前のユーザーのデータが見えないようにするため
-- **個人ごとのデータを含む応答はキャッシュさせない**（`Cache-Control: private, no-store`）
+- **応答はキャッシュさせない**：同じ URL でも、Cookie の現在ユーザーによって中身が変わるため。`src/start.ts` の request middleware が、HTML と Server Function のすべての応答に `Cache-Control: private, no-store` を付ける
 
 ---
 _依存の一覧ではなく、開発の仕方を左右する標準と判断を書く_

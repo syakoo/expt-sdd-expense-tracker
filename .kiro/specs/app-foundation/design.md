@@ -72,7 +72,9 @@
   - Lint とフォーマット：ESLint 10、Prettier 3
 - **依存方向（`src/` 内）**: 各層は左側の層だけを import する。
 
-  `identity/types` → `db/client.server` → `identity/schema` → `identity/user-repository.server` → `identity/current-user-store.server` → `identity/current-user.server` → `identity/*.functions` → `identity/index` → `identity/ui` → `routes/*`
+  `identity/types` → `identity/validation` → `db/client.server` → `identity/schema` → `identity/user-repository.server` → `identity/seed.server` → `identity/current-user-store.server` → `identity/current-user.server` → `identity/*.functions` → `identity/index` → `identity/ui`（`role-labels` を含む）→ `routes/-components` → `routes/*` → `router.tsx`
+
+  `start.ts`（全リクエストのミドルウェア）は `src/` のモジュールに依存しない
 - **後続 spec に許可する import**:
   - `@/identity`：取得口と型（すべての用途）
   - `@/identity/schema`：外部キー参照（`users.id`）のためだけ
@@ -83,12 +85,13 @@
   - 許可はファイルの命名で判定し、ディレクトリでは判定しない。テストを置く場所が増えても ESLint の設定を変えずに済む
 - **後続 spec に禁止する import**:
   - 上記以外の `@/identity/*` と `@/db/*`（`current-user-store.server`、`user-repository.server`、`select-user.functions` 等）
-  - ESLint の `no-restricted-imports` で機械的に検出する
+  - ESLint の `no-restricted-imports` で機械的に検出する。対象は `src/` 配下のファイルだけで、`scripts/` と `e2e/` は対象外
   - `@/identity/ui` はアプリシェル（`src/routes/__root.tsx`、`src/routes/select-user.tsx`）専用
 - **相対 import は `./`（同じディレクトリとその配下）だけに限る**:
   - `../` で始まる import は `src/` 全体で禁止する。ディレクトリをまたぐ import は必ず `@/` エイリアスで書く
   - これにより、モジュールの内部へ届く経路がエイリアスの形だけになり、上記の制限を相対パスで迂回できない
-- `identity` と `db` は後続 spec のモジュールを import しない
+- `identity` と `db` は後続 spec のモジュールを import しない。`db` は `identity` も import しない
+  - これらの向きは慣習で守る。Lint が検出するのはモジュールの内部への import だけで、公開面や `schema` への import は検出しない
 
 ### Revalidation Triggers
 - 次の形の変更：
@@ -176,8 +179,8 @@ graph TB
 - **Existing patterns preserved**: 既存コードなし。本 spec の構成が後続 spec の規約になる
 - **Steering compliance**:
   - `roadmap.md` の制約に従う：フルスタック TypeScript、SQLite、ORM 選定をここで行う、健全で見通しのよい設計を優先
-  - フレームワークは設計レビューで Next.js から TanStack Start に変更した（`research.md` 参照）。`roadmap.md` の記述も合わせて更新する
-  - `tech.md` / `structure.md` は未作成のため、本 design の決定を後で steering に反映する
+  - フレームワークは設計レビューで Next.js から TanStack Start に変更した（`research.md` 参照）。`roadmap.md` の記述も更新済み
+  - 本 design で決めた規約は、実装後に steering（`tech.md` / `structure.md`）へ移した
 
 ### Technology Stack
 
@@ -215,6 +218,7 @@ data/.gitkeep                       # SQLite ファイルの置き場（DB フ�
 scripts/
 └── db-setup.ts                     # データ初期化手順：DB ファイル作成 → マイグレーション適用 → シード投入
 src/
+├── start.ts                        # createStart({ requestMiddleware })：全応答に Cache-Control: private, no-store を付ける
 ├── router.tsx                      # getRouter()：createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0, defaultErrorComponent, defaultNotFoundComponent })
 ├── routeTree.gen.ts                # ルート定義から自動生成（コミット対象、Lint と Prettier の対象外）
 ├── styles.css                      # Tailwind の読み込み
@@ -280,10 +284,14 @@ e2e/
 テストファイルは対象と同じディレクトリに `*.test.ts`（コンポーネントは `*.test.tsx`）として置く。
 
 - `src/db/client.test.ts`
+- `src/db/test-utils.test.ts`
+- `src/identity/index.test.ts`
 - `src/identity/user-repository.test.ts`
 - `src/identity/seed.test.ts`
 - `src/identity/current-user.test.ts`
 - `src/identity/validation.test.ts`
+- `src/identity/ui/index.test.tsx`
+- `src/routes/-components/route-error.test.tsx`
 
 ### Modified Files
 - `README.md`：「セットアップ」節を追加する。内容は次のとおり。
@@ -344,7 +352,8 @@ sequenceDiagram
   - 切替時もヘッダーのリンクから同じ画面へ移り、同じ Server Function で上書きする（3.5）
 - 保持された ID が DB に存在しない場合（3.9）は未選択として扱う。Cookie は残したまま、次の選択で上書きする
 - 選択に成功したら、クライアントで `router.invalidate()` を呼んで全ルートの `beforeLoad` とローダーを新しい現在ユーザーで再実行させてから、トップへ遷移する（3.3, 3.5）
-- ユーザーごとに内容が変わるため、ルートルートは `Cache-Control: private, no-store` を返す
+- 同じ URL でも現在ユーザーによって応答が変わるため、HTML と Server Function のすべての応答に `Cache-Control: private, no-store` を付ける
+  - `src/start.ts` の request middleware で付ける。ルートの `headers` は HTML 文書にしか効かず、Server Function の応答に届かないため
 
 ### データ初期化
 
@@ -443,6 +452,7 @@ graph LR
   - drizzle の migrator も同じ比較で未適用を判定するため、`applyMigrations` が適用する対象と一致する
   - 確認するのは `create: false` で開くとき（`getDb()` を含む）だけ。`create: true` は初期化スクリプトとテスト用で、開いた後にマイグレーションを適用するため確認しない
 - 開発サーバーのモジュール再読み込みで接続が増えないよう、接続を `globalThis` にキャッシュする
+  - そのため、`getDb()` での確認はプロセスで最初の接続時の 1 回だけになる。開発サーバーを動かしたままマイグレーションを取り込んだら、`npm run db:setup` の後に開発サーバーを再起動する
 - テーブル定義を import しない（`db` は機能モジュールに依存しない）
 - ファイル名を `*.server.ts` にし、クライアントからの import をビルドエラーにする
 
@@ -770,16 +780,18 @@ export type { Role, UserId, User, CurrentUserResult } from './types';
 - このファイルは Server Function の定義（`*.functions.ts`）と型だけを再エクスポートする。クライアントから import しても、サーバー専用コードはバンドルに入らない
 
 **Implementation Notes**
-- `eslint.config.js` の `no-restricted-imports` で次を制限する
-  - `src/` の全ファイルで `../` で始まる import を禁止する（`group: ['../*']`）。ディレクトリをまたぐ import はエイリアスに統一され、以下の制限を相対パスで迂回できなくなる
-  - `src/identity/` と `src/db/` の外のファイルに対して：
-    - `@/identity/*` を禁止する。ただし `@/identity/schema` は許可する
-    - `@/identity/ui` は `src/routes/__root.tsx` と `src/routes/select-user.tsx` だけに許可する
-    - `@/db/*` を禁止する。ただし `@/db/client.server` は許可する
-  - `src/identity/` と `src/db/` の中では、上の階層のファイルも `@/identity/...`（例：`ui/` から `@/identity/select-user.functions`）のようにエイリアスで参照する。モジュール内部向けの制限はかからない
-  - `**/*.test.{ts,tsx}` 向けの設定ブロックを別に置き、上記に加えて `@/db/test-utils.server` と `@/identity/seed.server` を許可する。`files` のグロブで判定するため、テストの置き場所には依存しない
+- `eslint.config.js` の `no-restricted-imports` で次を制限する。対象は `src/` 配下のファイル
+  - 全ファイルで `../` で始まる import を禁止する（`group: ['..', '../**']`）。ディレクトリをまたぐ import はエイリアスに統一され、以下の制限を相対パスで迂回できなくなる
+  - 機能モジュールごとの制限を `MODULE_BOUNDARIES` に持たせる。各ファイルには、自分が属するモジュール以外の制限をすべてかける
+    - `internal`：モジュールの外から import できない内部ファイル。identity は `@/identity/*`（`schema` を除く）、db は `@/db/*`（`client.server` を除く）
+    - `testOnly`：モジュールの外ではテストファイルからだけ使えるもの。`@/identity/seed.server` と `@/db/test-utils.server`
+    - `appShellOnly`：モジュールの外ではアプリシェル（`src/routes/__root.tsx`、`src/routes/select-user.tsx`）からだけ使えるもの。`@/identity/ui`
+  - モジュール自身のファイルには自分の制限をかけない。上の階層のファイルも `@/identity/...`（例：`ui/` から `@/identity/select-user.functions`）のようにエイリアスで参照する
+  - モジュールどうしは互いの制限を受ける。identity から `@/db/migrate.server` は import できない
+  - テストファイルかどうかは `**/*.test.{ts,tsx}` のグロブで判定するため、テストの置き場所には依存しない
+  - 後続 spec は、自分のモジュールの制限パターンを定義して `MODULE_BOUNDARIES` に 1 件足す
 - flat config では、同じルールを後のブロックで設定するとオプションが丸ごと置き換わる（マージされない）。
-  - 制限パターンの一覧を `eslint.config.js` 内の定数にして、各ブロックで必要な分を展開する
+  - そのため、各ブロックの制限パターンは `MODULE_BOUNDARIES` から組み立て、必要な分をすべて含める
   - テスト用のブロックでも `../` の禁止と `@/identity/*` の制限が残ることを Setup Verification で確かめる
 - サーバー専用ファイル（`*.server.ts`）はインポート保護の対象になり、クライアントバンドルから到達すると `vite build` が失敗する
 
@@ -843,7 +855,6 @@ export function seedUsers(db: AppDatabase): void;
 
 - **RootRoute**（`__root.tsx`。1.1, 1.6, 3.4, 5.1, 5.2, 5.4）
   - `beforeLoad`: `return { currentUser: await getCurrentUser() }`。子ルートのコンテキストに `currentUser: CurrentUserResult` が入る
-  - `headers`: `{ 'Cache-Control': 'private, no-store' }`
   - `head`: 文字コード、viewport、タイトル「経費精算」、`styles.css` へのリンク
   - `shellComponent`（ドキュメント）：`<html lang="ja">`。`<head>` に `<HeadContent />`、`<body>` の中に `children`、末尾に `<Scripts />`
     - ルートルートの `beforeLoad` が失敗しても描画されるため、エラー表示にもスタイルとスクリプトが届く
@@ -852,7 +863,6 @@ export function seedUsers(db: AppDatabase): void;
   - `errorComponent`: `RouteError`。ルートルート自身（`beforeLoad` など）のエラーのときに、シェルの中で `component` の代わりに描画される。ヘッダーを含め、部分的なデータで画面を描画しない
     - TanStack Router のエラー境界はルートごとにあり、子ルートのエラーはここに届かない。子ルートのエラーはルーターの `defaultErrorComponent` が受け持つ（Router 参照）
     - 現在ユーザーの取得は全ナビゲーションでここの `beforeLoad` を通るため、DB 接続の失敗（1.6）はここで表示される
-  - `shellComponent` の API 名と振る舞いは、実装時に TanStack Start 1.169 で確認する
   - `notFoundComponent`: `RouteNotFound`
 - **AppLayout**（`_app.tsx`。3.1, 5.2）
   - `beforeLoad`: `context.currentUser.status === 'none'` なら `throw redirect({ to: '/select-user' })`。そうでなければ `return { user: context.currentUser.user }`
@@ -960,6 +970,14 @@ erDiagram
 - `src/identity/validation.test.ts`
   - `parseRoleInput` が `worker` / `approver` 以外を拒否すること（2.2, 4.3）
   - `parseSelectUserInput` が文字列でない値と空文字を拒否すること（3.3）
+- `src/db/test-utils.test.ts`
+  - `createTestDatabase()` がマイグレーション適用済みの空の DB を返し、呼び出しごとに独立していて、外部キー制約が有効であること
+- `src/identity/index.test.ts`
+  - `@/identity` が取得口・ロール定数・ラベルだけを公開し、選択操作・全件一覧・保持層・リポジトリ・DB 接続を公開しないこと（4.6）
+- `src/identity/ui/index.test.tsx`、`src/routes/-components/route-error.test.tsx`（`renderToString` で描画した HTML を検証する）
+  - `CurrentUserIndicator` が選択済み・未選択それぞれの表示と切替リンクを出すこと（5.1, 5.4）
+  - `UserSelectList` が全ユーザーを表示名・ロール付きで並べ、現在ユーザーに「選択中」を付け、認証情報の入力欄を置かず、ハイドレーション前はボタンを無効にすること（3.2, 3.6）
+  - `RouteError` / `RouteNotFound` が日本語のエラー・未検出表示を出すこと（1.6）
 - `src/db/client.test.ts`
   - 存在しないパスを `create: false` で開くと `reason: 'file-not-found'` の `DatabaseUnavailableError` になり、メッセージにパスを含むこと（1.6）
   - マイグレーション未適用の DB で `reason: 'migrations-not-applied'` になること（1.6）
@@ -980,6 +998,7 @@ Server Function のラッパー（`*.functions.ts`）とルートは薄い接続
   - 2 つのブラウザコンテキストで別々のユーザーを選び、互いに影響しないこと（3.8）
   - 同じブラウザコンテキストの 2 つのタブで、タブ B でユーザーを切り替えた後、タブ A でトップ画面へ遷移すると、ヘッダーとトップ画面の両方が新しいユーザーの表示になること（3.5）
   - `current_user_id=unknown` の Cookie を設定して `/` にアクセスすると `/select-user` に遷移すること（3.9）
+  - HTML 文書と Server Function の応答に `Cache-Control: private, no-store` が付くこと
 - `e2e/layout-accessibility.spec.ts`
   - `/select-user` と `/` の両方でヘッダーにアプリ名と切替リンクがあること（5.1）
   - キーボード（Tab / Enter）だけでユーザーを選択し、ヘッダーの切替リンクに到達できること（5.4）
@@ -995,6 +1014,7 @@ Server Function のラッパー（`*.functions.ts`）とルートは薄い接続
   - 相対パス（例：`src/receipts/x.ts` から `../identity/current-user-store.server`）での迂回も `../` の禁止で検出されること
   - あわせて、`*.test.ts` と `*.test.tsx` からの `@/db/test-utils.server` と `@/identity/seed.server` の import は検出されず、それ以外のファイルからは検出されることを確かめる
   - テストファイルでも `../` の import と `@/identity/current-user-store.server` の import は検出されること（flat config の上書きで制限が消えていないこと）
+  - `src/identity/` から `@/db/migrate.server`、`src/db/` から `@/identity/user-repository.server` の import が検出されること（モジュールどうしの内部 import）
 - `npm run typecheck` と `npm run format:check` が成功すること
 - 2.5 と 5.2 はルート構成のレビューで確認する
   - ユーザー編集用のルートがないこと
