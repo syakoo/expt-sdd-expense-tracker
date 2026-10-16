@@ -164,4 +164,5 @@
 - マイグレーションが 1 本の間は「最新の適用記録を削除 → applyMigrations」が再実行で失敗するため、client.test.ts は drizzle/ の一部コピーと `created_at` の書き換えで migrations-pending を検証している。
 - ユーザー選択ボタンの表示テキストは「選択」で、アクセシブルネームは aria-label の「<表示名> を選択」。E2E はロールと名前で探す。selectUser が例外を投げた場合の UI 表示は未実装（コンソール出力のみ）。
 - ルートの `headers` は router-core 1.170 では関数で渡す。DatabaseUnavailableError のメッセージ（DB パス入り）は本番でもハイドレーション用データに含まれる（表示は DEV のみ）。GET の Server Function の応答に Cache-Control は付かない（実装完了後の検証を受けて、`src/start.ts` の request middleware ですべての応答に付けるよう修正した）。
+- 独自の `startInstance` を定義したことで TanStack Start の既定の CSRF ミドルウェアが外れ、Server Function が同一オリジンの検査なしで呼べる状態だった（後続 spec の設計中に判明）。`src/start.ts` で `createCsrfMiddleware` を明示的に登録し、E2E で別オリジンからの呼び出しが 403 になることを確かめるよう修正した。
 - ロールラベルの「・」結合は identity/ui の `formatRoleLabels` とトップ画面で重複している（`@/identity/ui` はシェル専用のため）。後続 spec でも必要なら `@/identity` の公開面に加えることを検討する。

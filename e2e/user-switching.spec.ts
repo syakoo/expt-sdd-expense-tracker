@@ -200,3 +200,36 @@ test('ユーザーによって内容が変わる HTML と Server Function の応
     expect(cacheControl).toBe('private, no-store')
   }
 })
+
+test('別オリジンからの Server Function の呼び出しは 403 で拒否する', async ({
+  page,
+}) => {
+  // 画面からの通常の選択（同一オリジンの POST）で、ユーザー選択の Server Function の URL と本文を得る
+  const selectUserRequestPromise = page.waitForRequest(
+    (request) =>
+      request.url().includes('/_serverFn/') && request.method() === 'POST',
+  )
+  await page.goto('/select-user')
+  await selectUser(page, HANAKO.name)
+  const selectUserRequest = await selectUserRequestPromise
+
+  const headers = await selectUserRequest.allHeaders()
+  const data = selectUserRequest.postDataBuffer() ?? undefined
+
+  // 同じ要求をそのまま送り直せば通ることを先に確かめ、403 の理由をオリジンに絞る
+  const sameOriginResponse = await page.request.post(selectUserRequest.url(), {
+    headers,
+    data,
+  })
+  expect(sameOriginResponse.status()).toBe(200)
+
+  const crossOriginResponse = await page.request.post(selectUserRequest.url(), {
+    headers: {
+      ...headers,
+      origin: 'http://evil.example',
+      'sec-fetch-site': 'cross-site',
+    },
+    data,
+  })
+  expect(crossOriginResponse.status()).toBe(403)
+})

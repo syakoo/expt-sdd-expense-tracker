@@ -59,6 +59,7 @@ npm run db:generate   # スキーマ変更からマイグレーションを生�
 - **TypeScript は 6.0 系**：typescript-eslint が 7 系に未対応のため
 - **ルーターはプリロードとキャッシュを無効化**（`defaultPreload: false`、`defaultGcTime: 0`）：ユーザー切替の直後に、前のユーザーのデータが見えないようにするため
 - **応答はキャッシュさせない**：同じ URL でも、Cookie の現在ユーザーによって中身が変わるため。`src/start.ts` の request middleware が、HTML と Server Function のすべての応答に `Cache-Control: private, no-store` を付ける
+- **Server Function は CSRF ミドルウェアで守る**：`src/start.ts` で独自の `startInstance` を定義しているため、TanStack Start の既定の CSRF ミドルウェアは効かない。`createCsrfMiddleware` を明示的に登録し、同一オリジン以外からの Server Function の呼び出しを 403 で拒否する。`requestMiddleware` を組み替えるときもこの登録を外さない
 
 ---
 _依存の一覧ではなく、開発の仕方を左右する標準と判断を書く_
