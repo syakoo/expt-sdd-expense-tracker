@@ -1,0 +1,22 @@
+{
+  "feature_name": "expense-claim-workflow",
+  "created_at": "2026-10-16T04:54:42Z",
+  "updated_at": "2026-10-16T05:12:36Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
