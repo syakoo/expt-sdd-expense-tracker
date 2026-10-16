@@ -270,17 +270,12 @@ e2e/
 `vite build` はインポート保護の違反をエラーにするため、境界の検証として使う。本番サーバー（`start`）は持たない。
 
 **規約（後続 spec 向け）**:
-- 機能画面は `src/routes/_app/` 配下に置く。ルートルートの共通レイアウトと `_app` のゲートが自動で適用される（5.2）
-- 画面から現在ユーザーを使うときは、`_app` のコンテキストの `user`（`Route.useRouteContext()`、ローダーの `context.user`）を使う。これは同じナビゲーションで `getCurrentUser` が返した値である
-- 自機能の Server Function でデータを返す・変更するときは、ハンドラの先頭で `await requireCurrentUser()` を呼んで認可の材料にする。`beforeLoad` のゲートは表示の保護であり、データの保護ではない
-- サーバー側のロジック（問い合わせ、検証、権限の判断）は、`db: AppDatabase` と `user: User` を引数で受け取る普通の関数として `*.server.ts` に置く。`getDb()` と `requireCurrentUser()` を呼ぶのは `*.functions.ts` のハンドラだけにする。identity の `current-user.server.ts` と `current-user.functions.ts` の分け方と同じで、ロジックを Vitest から in-memory DB と任意のユーザーで検証できる
-- テストでは `createTestDatabase()` で DB を用意し、`seedUsers(db)` でユーザーを投入してから `SEED_USERS` の ID を外部キーに使う。この 2 つの import は `*.test.{ts,tsx}` からだけ許可される
-- コンポーネントのテストは `*.test.tsx` とする。DOM が必要なテストはファイル先頭の `// @vitest-environment` コメントで環境を指定し、必要な依存（jsdom 等）は後続 spec が追加する
-- 機能画面のローダーやコンポーネントで起きたエラーは、ルーターの `defaultErrorComponent`（`RouteError`）が共通レイアウトの `<main>` の中に表示する。ヘッダーと切替操作は残る。画面固有の表示が必要なときだけ、そのルートに `errorComponent` を置く。データが見つからないときは `throw notFound()` を使う
-- ディレクトリをまたぐ import は `@/` エイリアスで書く。`../` は Lint で禁止される
-- 機能ごとのテーブル定義は `src/<feature>/schema.ts` に置く。`drizzle.config.ts` のグロブが拾うため、本 spec のファイルを変更せずに追加できる
-- ユーザーを参照する外部キー列は `text(...).references(() => users.id).$type<UserId>()` とする
-- サーバー専用のファイル（DB アクセスなど）は `*.server.ts`、Server Function の定義は `*.functions.ts` と命名する
+本 spec の構成から決まった規約は、プロジェクト全体の規約として steering に移した。
+
+- 配置、命名、import 境界、Server Function の書き方、テストのデータ準備：`.kiro/steering/structure.md`
+- 技術スタック、テストの方針、主要な技術判断：`.kiro/steering/tech.md`
+
+規約が依存する契約（`@/identity` の公開面、`AppDatabase`、`createTestDatabase()`、`seedUsers`）は、本書の Components and Interfaces が正とする。規約を変えるときは、Revalidation Triggers に当たるかどうかを本書で確かめる。
 
 テストファイルは対象と同じディレクトリに `*.test.ts`（コンポーネントは `*.test.tsx`）として置く。
 
