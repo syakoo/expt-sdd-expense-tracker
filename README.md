@@ -12,6 +12,37 @@ Kiro スタイルの Spec-Driven Development (SDD) を、AI エージェント�
 - 承認者による承認／差し戻し（コメント付き）と、差し戻し後の再申請
 - 承認をもって精算完了とし、以後は変更不可
 
+## セットアップ
+
+### 1. Node.js 24 を用意する
+
+Node.js 24 を使います。[mise](https://mise.jdx.dev/) を使っている場合は、リポジトリ直下の `.node-version` を自動で読みます。
+
+```sh
+node -v # v24.x
+```
+
+### 2. 依存関係のインストール・データ初期化・起動
+
+```sh
+npm install
+npm run db:setup
+npm run dev
+```
+
+- `npm run db:setup` はデータ初期化手順です。DB ファイルを作成し、未適用のマイグレーションを順に適用してから、シードユーザーを投入します。何度実行しても同じ状態になります
+- DB ファイルの場所は既定で `data/app.db` です。環境変数 `DATABASE_PATH` で変更できます
+- `npm run dev` の後、ブラウザで http://localhost:3000/ を開きます
+
+### マイグレーションを追加する
+
+1. 機能ごとのテーブル定義（`src/<feature>/schema.ts`）を変更する
+2. `npm run db:generate` で `drizzle/` にマイグレーションを生成する
+3. 生成したファイル（手で編集した場合も含む）をコミットする
+4. `npm run db:setup` を実行して手元の DB に適用する
+
+`drizzle-kit push` は履歴が残らないため使いません。
+
 ## 開発の流れ
 
 ```mermaid

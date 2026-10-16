@@ -1,0 +1,16 @@
+src/routeTree.gen.ts
+drizzle/
+data/
+dist/
+.output/
+.tanstack/
+.vinxi/
+.nitro/
+test-results/
+playwright-report/
+package-lock.json
+
+# 仕様駆動開発のツール・仕様ドキュメント（kiro が管理）
+.claude/
+.kiro/
+CLAUDE.md

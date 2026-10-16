@@ -39,6 +39,6 @@ TanStack Start（React）によるフルスタック構成で、認証は持た�
   - 承認者候補の一覧（app-foundation のユーザー／ロール情報を workflow が参照）
 
 ## Specs (dependency order)
-- [ ] app-foundation -- TanStack Start 基盤、DB/ORM、ユーザーとロール（作業者／承認者）の簡易切替. Dependencies: none
+- [x] app-foundation -- TanStack Start 基盤、DB/ORM、ユーザーとロール（作業者／承認者）の簡易切替. Dependencies: none
 - [ ] receipt-management -- 作業者による自分の領収書の登録・編集・削除・一覧. Dependencies: app-foundation
 - [ ] expense-claim-workflow -- 複数領収書の申請、承認者指定、承認／差し戻し／再申請と状態遷移. Dependencies: app-foundation, receipt-management
