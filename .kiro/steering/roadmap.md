@@ -35,10 +35,11 @@ TanStack Start（React）によるフルスタック構成で、認証は持た�
 - **Why this split**: 「誰か（ユーザー／ロール）」「何を（領収書）」「どう流すか（申請ワークフロー）」で責務を分け、変更理由ごとに spec を独立させる。状態遷移ルールは expense-claim-workflow だけが知る
 - **Shared seams to watch**:
   - 現在ユーザーの取得インターフェース（app-foundation が提供し、他 2 spec が利用）
-  - 「申請に含まれている領収書は編集・削除できない」というルールの所有者。状態は expense-claim-workflow が持ち、receipt-management は workflow が公開する問い合わせ（ロック判定）に従う形とし、receipt-management が申請状態を直接解釈しないこと
+  - 「申請に含まれている領収書は編集・削除できない」というルールの所有者。いつロックするかの判断（申請状態）は expense-claim-workflow が持ち、ロック記録（`receipt_locks`）は receipt-management が持つ。workflow は申請の状態変更と同じトランザクションで `@/receipts/api.server` の `lockReceipts` / `unlockReceipts` を呼ぶ。receipt-management は申請状態を直接解釈しないこと（遅延ロードされる Server Function ではロック判定の登録タイミングを保証できないため、問い合わせポート方式は不採用）
+  - `src/start.ts` のリクエストミドルウェア（Cache-Control、CSRF）は app-foundation の所有。独自の `startInstance` により既定の CSRF 保護が外れるため、app-foundation が `createCsrfMiddleware` を明示的に登録する。後続 spec は `src/start.ts` を変更せず、これに依存する
   - 承認者候補の一覧（app-foundation のユーザー／ロール情報を workflow が参照）
 
 ## Specs (dependency order)
 - [x] app-foundation -- TanStack Start 基盤、DB/ORM、ユーザーとロール（作業者／承認者）の簡易切替. Dependencies: none
-- [ ] receipt-management -- 作業者による自分の領収書の登録・編集・削除・一覧. Dependencies: app-foundation
-- [ ] expense-claim-workflow -- 複数領収書の申請、承認者指定、承認／差し戻し／再申請と状態遷移. Dependencies: app-foundation, receipt-management
+- [x] receipt-management -- 作業者による自分の領収書の登録・編集・削除・一覧. Dependencies: app-foundation
+- [x] expense-claim-workflow -- 複数領収書の申請、承認者指定、承認／差し戻し／再申請と状態遷移. Dependencies: app-foundation, receipt-management
