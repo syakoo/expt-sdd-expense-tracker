@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import type { UserId } from '@/identity'
 import type { Receipt, ReceiptId } from '@/receipts'
 import {
+  DeleteReceiptSection,
   formatReceiptDate,
   formatYen,
   LockedNotice,
@@ -19,9 +20,12 @@ import {
   ReceiptNotFound,
   WorkerRoleRequired,
 } from '@/receipts/ui'
+import { DeleteReceiptSectionView } from './delete-receipt-section'
 import { ReceiptFormView } from './receipt-form'
 import {
+  DELETE_FAILED_MESSAGE,
   SAVE_FAILED_MESSAGE,
+  toDeleteReceiptOutcome,
   toReceiptFormOutcome,
 } from './receipt-form-outcome'
 
@@ -419,6 +423,98 @@ describe('toReceiptFormOutcome', () => {
   it('例外時の警告文', () => {
     expect(SAVE_FAILED_MESSAGE).toBe(
       '保存できませんでした。時間をおいてもう一度お試しください',
+    )
+  })
+})
+
+describe('DeleteReceiptSection', () => {
+  it('初期表示は「この領収書を削除」ボタンだけで、確認領域を出さない。ハイドレーション前は無効', async () => {
+    const html = await renderInRouter(
+      <DeleteReceiptSection receiptId={'receipt-01' as ReceiptId} />,
+    )
+    expect(html).toMatch(
+      /<button[^>]*type="button"[^>]*disabled=""[^>]*>この領収書を削除<\/button>/,
+    )
+    expect(html.match(/<button/g)).toHaveLength(1)
+    expect(html).not.toContain('role="group"')
+    expect(html).not.toContain('この領収書を削除しますか？')
+    expect(html).not.toContain('削除する')
+    expect(html).not.toContain('キャンセル')
+    expect(html).not.toContain('role="alert"')
+  })
+})
+
+describe('DeleteReceiptSectionView（確認領域を開いた表示）', () => {
+  function renderOpen(props: { busy: boolean; alert?: string }) {
+    return renderInRouter(
+      <DeleteReceiptSectionView
+        open
+        alert={props.alert}
+        busy={props.busy}
+        onOpen={() => {}}
+        onConfirm={() => {}}
+        onCancel={() => {}}
+      />,
+    )
+  }
+
+  it('見出し「この領収書を削除しますか？」を aria-labelledby で指す group に「削除する」「キャンセル」を置く。見出しはフォーカスを受けられる', async () => {
+    const html = await renderOpen({ busy: false })
+    const group = html.match(/<[a-z]+[^>]*role="group"[^>]*>/)?.[0] ?? ''
+    expect(group).not.toBe('')
+    const labelledBy = group.match(/aria-labelledby="([^"]+)"/)?.[1] ?? ''
+    expect(labelledBy).not.toBe('')
+    const heading = html.match(
+      new RegExp(`<h[2-6][^>]*id="${labelledBy}"[^>]*>([^<]*)<`),
+    )
+    expect(heading?.[1]).toBe('この領収書を削除しますか？')
+    expect(heading?.[0]).toContain('tabindex="-1"')
+    expect(html).toMatch(
+      /<button[^>]*type="button"(?![^>]*disabled=)[^>]*>削除する<\/button>/,
+    )
+    expect(html).toMatch(
+      /<button[^>]*type="button"(?![^>]*disabled=)[^>]*>キャンセル<\/button>/,
+    )
+    expect(html).not.toContain('role="alert"')
+  })
+
+  it('送信中は「削除する」「キャンセル」の両方を無効にし、警告は role="alert" で出す', async () => {
+    const html = await renderOpen({ busy: true, alert: DELETE_FAILED_MESSAGE })
+    expect(html).toMatch(
+      /<button[^>]*type="button"[^>]*disabled=""[^>]*>削除する<\/button>/,
+    )
+    expect(html).toMatch(
+      /<button[^>]*type="button"[^>]*disabled=""[^>]*>キャンセル<\/button>/,
+    )
+    expect(html).toMatch(
+      new RegExp(`<[a-z]+[^>]*role="alert"[^>]*>${DELETE_FAILED_MESSAGE}<`),
+    )
+  })
+})
+
+describe('toDeleteReceiptOutcome', () => {
+  it('deleted は削除済みとして一覧へ遷移する', () => {
+    expect(toDeleteReceiptOutcome({ status: 'deleted' })).toEqual({
+      kind: 'deleted',
+    })
+  })
+
+  it('locked は警告を出して読み直す。not-found・forbidden は登録・更新と同じ警告を出す', () => {
+    for (const status of ['locked', 'not-found', 'forbidden'] as const) {
+      expect(toDeleteReceiptOutcome({ status }), status).toEqual(
+        toReceiptFormOutcome({ status }),
+      )
+    }
+    expect(toDeleteReceiptOutcome({ status: 'locked' })).toEqual({
+      kind: 'rejected',
+      alert: 'この領収書はロック中のため、編集・削除できません',
+      reload: true,
+    })
+  })
+
+  it('例外時の警告文', () => {
+    expect(DELETE_FAILED_MESSAGE).toBe(
+      '削除できませんでした。時間をおいてもう一度お試しください',
     )
   })
 })

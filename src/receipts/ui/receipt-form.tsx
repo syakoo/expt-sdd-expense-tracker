@@ -71,6 +71,8 @@ export function ReceiptForm({ mode, receipt }: ReceiptFormProps) {
   }
 
   async function handleSubmit() {
+    // 同じ警告が続いても読み上げられるよう、前の警告を消してから送る
+    setAlert(undefined)
     setSubmitting(true)
     try {
       let result: CreateReceiptResult | UpdateReceiptResult | undefined

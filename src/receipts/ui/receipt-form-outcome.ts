@@ -1,5 +1,6 @@
 import type {
   CreateReceiptResult,
+  DeleteReceiptResult,
   ReceiptField,
   ReceiptFieldErrors,
   UpdateReceiptResult,
@@ -18,6 +19,17 @@ export const RECEIPT_FIELDS: readonly ReceiptField[] = [
 export const SAVE_FAILED_MESSAGE =
   '保存できませんでした。時間をおいてもう一度お試しください'
 
+/** 削除の送信が例外で終わったとき（保存先の障害など）の警告文 */
+export const DELETE_FAILED_MESSAGE =
+  '削除できませんでした。時間をおいてもう一度お試しください'
+
+/** 受け付けられなかった。警告を出し、reload なら読み直して表示を切り替える */
+export interface RejectedOutcome {
+  readonly kind: 'rejected'
+  readonly alert: string
+  readonly reload: boolean
+}
+
 /** 送信結果を受けて画面がとる振る舞い */
 export type ReceiptFormOutcome =
   /** 保存できた。データを読み直して一覧へ遷移する */
@@ -29,12 +41,12 @@ export type ReceiptFormOutcome =
       readonly alert: string
       readonly focus: ReceiptField | undefined
     }
-  /** 受け付けられなかった。警告を出し、reload なら読み直して表示を切り替える */
-  | {
-      readonly kind: 'rejected'
-      readonly alert: string
-      readonly reload: boolean
-    }
+  | RejectedOutcome
+
+/** 削除の送信結果を受けて画面がとる振る舞い */
+export type DeleteReceiptOutcome =
+  /** 削除できた。データを読み直して一覧へ遷移する */
+  { readonly kind: 'deleted' } | RejectedOutcome
 
 /** 登録・更新の結果を、画面の振る舞いに対応づける（design の System Flows の Key Decisions） */
 export function toReceiptFormOutcome(
@@ -53,6 +65,31 @@ export function toReceiptFormOutcome(
           (field) => result.errors[field] !== undefined,
         ),
       }
+    case 'locked':
+    case 'not-found':
+    case 'forbidden':
+      return toRejectedOutcome(result.status)
+  }
+}
+
+/** 削除の結果を、画面の振る舞いに対応づける。拒否の扱いは登録・更新と同じ */
+export function toDeleteReceiptOutcome(
+  result: DeleteReceiptResult,
+): DeleteReceiptOutcome {
+  switch (result.status) {
+    case 'deleted':
+      return { kind: 'deleted' }
+    case 'locked':
+    case 'not-found':
+    case 'forbidden':
+      return toRejectedOutcome(result.status)
+  }
+}
+
+function toRejectedOutcome(
+  status: 'locked' | 'not-found' | 'forbidden',
+): RejectedOutcome {
+  switch (status) {
     case 'locked':
       // 編集画面を読み取り専用の表示に切り替えるため、読み直す
       return {
