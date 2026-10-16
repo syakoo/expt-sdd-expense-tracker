@@ -9,7 +9,7 @@
   - 単体テストで、作業者のみ・承認者のみ・両方のロールのユーザーに対する判定（真・偽・真）と、費目の定数が 7 種類この順であることが `npm run test` で通る
   - _Requirements: 2.4, 2.7, 6.1_
 
-- [ ] 1.2 領収書とロックの記録のテーブル定義とマイグレーション
+- [x] 1.2 領収書とロックの記録のテーブル定義とマイグレーション
   - 領収書（所有者はユーザーへの外部キー、日付は文字列、金額は 1〜9,999,999 の CHECK 制約、費目は 7 値の CHECK 制約、メモは既定値が空文字、作成・更新日時）と、ロックの記録（領収書 ID を主キーとし、領収書を削除制限付きで参照）を design の Physical Data Model どおりに定義する
   - 所有者・日付・作成日時のインデックスを付ける
   - `npm run db:generate -- --name receipts` で生成した SQL マイグレーションとメタ情報をコミット対象に加える
@@ -137,3 +137,7 @@
   - テストファイル以外から `@/receipts/test-fixtures.server` を import している箇所がないことを検索で確かめる
   - 別オリジンを装った登録の Server Function への POST が 403 になり、開発サーバーのログに CSRF ミドルウェアの警告が出ないことを確かめる（app-foundation が `src/start.ts` で登録している CSRF ミドルウェアが本 spec の Server Function にも効いていることの確認。`src/start.ts` は変更しない）
   - _Requirements: 6.6, 7.5_
+
+## Implementation Notes
+- ON DELETE RESTRICT の違反（ロック中の領収書の行の削除）は better-sqlite3 では `SQLITE_CONSTRAINT_TRIGGER`（メッセージは "FOREIGN KEY constraint failed"）になる。挿入側の外部キー違反は `SQLITE_CONSTRAINT_FOREIGNKEY`。2.2・2.6 のテストとエラーの扱いはこれを前提にする
+- マイグレーションを追加すると適用件数が変わる。`src/db/client.test.ts` は journal のエントリ数と比べる形にしてあるので、以降のマイグレーション追加では直さなくてよい
