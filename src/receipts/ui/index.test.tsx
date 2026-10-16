@@ -14,10 +14,16 @@ import {
   formatYen,
   LockedNotice,
   ReceiptDetails,
+  ReceiptForm,
   ReceiptList,
   ReceiptNotFound,
   WorkerRoleRequired,
 } from '@/receipts/ui'
+import { ReceiptFormView } from './receipt-form'
+import {
+  SAVE_FAILED_MESSAGE,
+  toReceiptFormOutcome,
+} from './receipt-form-outcome'
 
 // サーバー描画（ハイドレーション前）の HTML を得る。Link と useRouter のためにメモリ上のルーターで包む
 async function renderInRouter(node: ReactNode): Promise<string> {
@@ -196,6 +202,223 @@ describe('ReceiptList', () => {
     expect(unlockedLink).toContain('href="/receipts/receipt-02/edit"')
     expect(unlockedLink).toContain(
       'aria-label="2026/09/01 文具店 の領収書を開く"',
+    )
+  })
+})
+
+describe('ReceiptForm', () => {
+  const FIELDS = [
+    { id: 'date', label: '日付', tag: 'input' },
+    { id: 'amount', label: '金額', tag: 'input' },
+    { id: 'payee', label: '支払先', tag: 'input' },
+    { id: 'category', label: '費目', tag: 'select' },
+    { id: 'memo', label: 'メモ', tag: 'textarea' },
+  ] as const
+
+  /** `<label for="...">` の for を、ラベルの文字（先頭）で探す */
+  function labelTargetOf(html: string, label: string): string | undefined {
+    return html.match(new RegExp(`<label[^>]*for="([^"]+)"[^>]*>${label}`))?.[1]
+  }
+
+  /** id で入力欄の開始タグを取り出す */
+  function controlTagOf(html: string, id: string): string | undefined {
+    return html.match(
+      new RegExp(`<(?:input|select|textarea)[^>]*id="${id}"[^>]*>`),
+    )?.[0]
+  }
+
+  it('5 つの入力欄を、ラベルで名前を付けて出す。必須の 4 つは aria-required と見える印、メモは任意と明記', async () => {
+    const html = await renderInRouter(<ReceiptForm mode="create" />)
+    for (const field of FIELDS) {
+      const id = labelTargetOf(html, field.label)
+      expect(id, field.label).toBeDefined()
+      const tag = controlTagOf(html, id ?? '')
+      expect(tag, field.label).toBeDefined()
+      expect(tag?.startsWith(`<${field.tag}`)).toBe(true)
+      if (field.id === 'memo') {
+        expect(tag).not.toContain('aria-required')
+      } else {
+        expect(tag).toContain('aria-required="true"')
+      }
+    }
+    expect(html.match(/必須/g)).toHaveLength(4)
+    expect(html).toContain('任意')
+    expect(controlTagOf(html, labelTargetOf(html, '日付') ?? '')).toContain(
+      'type="date"',
+    )
+    const amountTag = controlTagOf(html, labelTargetOf(html, '金額') ?? '')
+    expect(amountTag).toContain('type="text"')
+    expect(amountTag).toContain('inputMode="numeric"')
+    expect(html).toMatch(/>円</)
+  })
+
+  it('費目は「選択してください」（値が空）の後に 7 種類をこの順で並べる', async () => {
+    const html = await renderInRouter(<ReceiptForm mode="create" />)
+    const select = html.match(/<select[\s\S]*?<\/select>/)?.[0] ?? ''
+    const options = [
+      ...select.matchAll(/<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\/option>/g),
+    ].map(([, value, label]) => [value, label])
+    expect(options).toEqual([
+      ['', '選択してください'],
+      ['transportation', '交通費'],
+      ['lodging', '宿泊費'],
+      ['meeting', '会議費'],
+      ['entertainment', '交際費'],
+      ['supplies', '消耗品費'],
+      ['communication', '通信費'],
+      ['other', 'その他'],
+    ])
+  })
+
+  it('登録では入力欄が空で、ハイドレーション前は「登録する」ボタンが無効。キャンセルで一覧へ戻れる', async () => {
+    const html = await renderInRouter(<ReceiptForm mode="create" />)
+    expect(html).toMatch(
+      /<button[^>]*type="submit"[^>]*disabled=""[^>]*>登録する<\/button>/,
+    )
+    expect(html).toMatch(/<a[^>]*href="\/receipts"[^>]*>キャンセル<\/a>/)
+    expect(html).not.toContain('role="alert"')
+    expect(html).not.toContain('aria-invalid=')
+  })
+
+  it('編集では現在の内容を初期値にし、ハイドレーション前は「更新する」ボタンが無効', async () => {
+    const html = await renderInRouter(
+      <ReceiptForm
+        mode="edit"
+        receipt={{ ...LOCKED_RECEIPT, locked: false }}
+      />,
+    )
+    expect(controlTagOf(html, labelTargetOf(html, '日付') ?? '')).toContain(
+      'value="2026-10-16"',
+    )
+    expect(controlTagOf(html, labelTargetOf(html, '金額') ?? '')).toContain(
+      'value="1234"',
+    )
+    expect(controlTagOf(html, labelTargetOf(html, '支払先') ?? '')).toContain(
+      'value="東京駅前タクシー"',
+    )
+    expect(html).toMatch(/<option[^>]*value="transportation"[^>]*selected=""/)
+    expect(html).toMatch(/<textarea[^>]*>顧客訪問<\/textarea>/)
+    expect(html).toMatch(
+      /<button[^>]*type="submit"[^>]*disabled=""[^>]*>更新する<\/button>/,
+    )
+  })
+})
+
+describe('ReceiptFormView（入力の誤りの表示）', () => {
+  it('誤りのある入力欄に aria-invalid と、エラー文を指す aria-describedby を付け、先頭に警告を出す', async () => {
+    const html = await renderInRouter(
+      <ReceiptFormView
+        mode="create"
+        values={{
+          date: '2026-10-16',
+          amount: 'abc',
+          payee: '',
+          category: 'meeting',
+          memo: '',
+        }}
+        errors={{
+          amount: '金額は 1 以上 9,999,999 以下の整数で入力してください',
+          payee: '支払先を入力してください',
+        }}
+        alert="入力内容を確認してください"
+        submitDisabled={false}
+        onChange={() => {}}
+        onSubmit={() => {}}
+      />,
+    )
+    expect(html).toMatch(
+      /<[a-z]+[^>]*role="alert"[^>]*>入力内容を確認してください</,
+    )
+    // 警告はフォームの先頭（最初の入力欄より前）
+    expect(html.indexOf('role="alert"')).toBeLessThan(html.indexOf('<input'))
+
+    for (const [label, message] of [
+      ['金額', '金額は 1 以上 9,999,999 以下の整数で入力してください'],
+      ['支払先', '支払先を入力してください'],
+    ] as const) {
+      const id =
+        html.match(new RegExp(`<label[^>]*for="([^"]+)"[^>]*>${label}`))?.[1] ??
+        ''
+      const tag =
+        html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))?.[0] ?? ''
+      expect(tag, label).toContain('aria-invalid="true"')
+      const describedBy = tag.match(/aria-describedby="([^"]+)"/)?.[1] ?? ''
+      const errorIds = describedBy.split(' ')
+      expect(
+        errorIds.some((errorId) =>
+          new RegExp(`id="${errorId}"[^>]*>${message}<`).test(html),
+        ),
+        label,
+      ).toBe(true)
+    }
+    // 入力は保持される
+    expect(html).toMatch(/<input[^>]*value="abc"/)
+    expect(html).toMatch(/<option[^>]*value="meeting"[^>]*selected=""/)
+
+    const dateId = html.match(/<label[^>]*for="([^"]+)"[^>]*>日付/)?.[1] ?? ''
+    const dateTag = html.match(
+      new RegExp(`<input[^>]*id="${dateId}"[^>]*>`),
+    )?.[0]
+    expect(dateTag).not.toContain('aria-invalid=')
+    expect(html).toMatch(
+      /<button[^>]*type="submit"(?![^>]*disabled=)[^>]*>登録する<\/button>/,
+    )
+  })
+})
+
+describe('toReceiptFormOutcome', () => {
+  it('created / updated は保存済みとして一覧へ遷移する', () => {
+    expect(
+      toReceiptFormOutcome({ status: 'created', receipt: LOCKED_RECEIPT }),
+    ).toEqual({ kind: 'saved' })
+    expect(
+      toReceiptFormOutcome({ status: 'updated', receipt: LOCKED_RECEIPT }),
+    ).toEqual({ kind: 'saved' })
+  })
+
+  it('invalid は項目ごとのエラーと「入力内容を確認してください」、最初の誤りの欄（入力欄の順）を返す', () => {
+    expect(
+      toReceiptFormOutcome({
+        status: 'invalid',
+        errors: {
+          memo: 'メモの誤り',
+          amount: '金額の誤り',
+          category: '費目の誤り',
+        },
+      }),
+    ).toEqual({
+      kind: 'invalid',
+      errors: {
+        memo: 'メモの誤り',
+        amount: '金額の誤り',
+        category: '費目の誤り',
+      },
+      alert: '入力内容を確認してください',
+      focus: 'amount',
+    })
+  })
+
+  it('locked はロック中の警告を出して読み直す。not-found・forbidden はそれぞれの警告を出す', () => {
+    expect(toReceiptFormOutcome({ status: 'locked' })).toEqual({
+      kind: 'rejected',
+      alert: 'この領収書はロック中のため、編集・削除できません',
+      reload: true,
+    })
+    expect(toReceiptFormOutcome({ status: 'not-found' })).toEqual({
+      kind: 'rejected',
+      alert: '領収書が見つかりません',
+      reload: false,
+    })
+    expect(toReceiptFormOutcome({ status: 'forbidden' })).toEqual({
+      kind: 'rejected',
+      alert: '領収書を管理するには作業者ロールが必要です',
+      reload: false,
+    })
+  })
+
+  it('例外時の警告文', () => {
+    expect(SAVE_FAILED_MESSAGE).toBe(
+      '保存できませんでした。時間をおいてもう一度お試しください',
     )
   })
 })

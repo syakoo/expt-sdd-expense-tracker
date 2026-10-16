@@ -1,7 +1,5 @@
 import { Link } from '@tanstack/react-router'
-
-const LINK_CLASS_NAME =
-  'rounded text-blue-700 underline underline-offset-2 hover:text-blue-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+import { LINK_CLASS_NAME } from './link-style'
 
 export function WorkerRoleRequired() {
   return (

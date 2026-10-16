@@ -2,9 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { RECEIPT_CATEGORY_LABELS } from '@/receipts'
 import type { Receipt } from '@/receipts'
 import { formatReceiptDate, formatYen } from './format'
-
-const LINK_CLASS_NAME =
-  'rounded text-blue-700 underline underline-offset-2 hover:text-blue-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700'
+import { LINK_CLASS_NAME } from './link-style'
 
 const COLUMNS = ['日付', '金額', '支払先', '費目', '状態', '操作'] as const
 

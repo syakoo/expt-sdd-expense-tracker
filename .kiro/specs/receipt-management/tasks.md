@@ -93,7 +93,7 @@
   - 描画テストで、空の表示とリンク、ロック中の行の表示、金額の書式、費目のラベル、リンクのアクセシブルネームが `npm run test` で通り、`npm run typecheck` が成功する
   - _Requirements: 2.8, 3.1, 3.3, 3.4, 3.5, 8.1_
 
-- [ ] 3.3 登録・編集で共通のフォーム
+- [x] 3.3 登録・編集で共通のフォーム
   - 日付・金額（「円」付き）・支払先・費目（「選択してください」の後に 7 種類）・メモ（任意と明記）の入力欄を、ラベルと必須の印付きで表示する。編集では現在の内容を初期値にする
   - 送信結果ごとに design の System Flows の Key Decisions どおりに振る舞う：成功ならデータを読み直して一覧へ遷移、入力の誤りなら入力を保持したまま項目ごとのエラーを入力欄に関連付け（`aria-invalid`、`aria-describedby`）、先頭に警告を出して最初の誤りの欄へフォーカス、ロック中・見つからない・権限なしはそれぞれの警告、例外は「保存できませんでした」の警告で遷移しない
   - ハイドレーション前と送信中は送信ボタンを無効にする。キャンセルで一覧へ戻れる
@@ -142,3 +142,5 @@
 - ON DELETE RESTRICT の違反（ロック中の領収書の行の削除）は better-sqlite3 では `SQLITE_CONSTRAINT_TRIGGER`（メッセージは "FOREIGN KEY constraint failed"）になる。挿入側の外部キー違反は `SQLITE_CONSTRAINT_FOREIGNKEY`。2.2・2.6 のテストとエラーの扱いはこれを前提にする
 - マイグレーションを追加すると適用件数が変わる。`src/db/client.test.ts` は journal のエントリ数と比べる形にしてあるので、以降のマイグレーション追加では直さなくてよい
 - 読み書きの関数は `AppDatabase` を受ける。`db.transaction(...)` の中でも同じ `db` を渡せばそのトランザクションに含まれ（better-sqlite3 は 1 接続で、入れ子は SAVEPOINT になる）、drizzle の `tx` を渡す必要はない。`updateReceiptRow` は存在しない ID で Error を投げ、`deleteReceiptRow` は存在しない ID では何もしないので、呼び出し側が先に存在を確かめる
+- インストール済みの `useServerFn` はリダイレクト（現在ユーザー未選択）を捕まえて遷移し、結果として `undefined` を返す。画面部品の送信処理は `undefined` を例外扱いせずに終える（`receipt-form.tsx` の guard を参照）
+- フォームの `locked` の警告はフォームの状態に持つため、`router.invalidate()` で編集画面が読み取り専用に切り替わると消える。4.2 では `LockedNotice` が同じことを伝えるかを確かめる
