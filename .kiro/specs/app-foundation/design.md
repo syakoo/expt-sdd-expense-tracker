@@ -237,7 +237,8 @@ src/
 │   └── ui/
 │       ├── index.ts                # アプリシェル向け公開面：CurrentUserIndicator、UserSelectList、listAllUsers
 │       ├── current-user-indicator.tsx  # 現在ユーザーの表示名・ロールと切替リンク
-│       └── user-select-list.tsx        # 全ユーザー一覧と選択ボタン
+│       ├── user-select-list.tsx        # 全ユーザー一覧と選択ボタン
+│       └── role-labels.ts              # formatRoleLabels：ロールの表示ラベルを「・」でつなぐ（ui 内部）
 └── routes/
     ├── -components/
     │   └── route-error.tsx         # RouteError / RouteNotFound：日本語のエラー・未検出表示（ルート生成の対象外）
@@ -454,9 +455,11 @@ graph LR
 
 ##### Service Interface
 ```typescript
+import type Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-export type AppDatabase = BetterSQLite3Database;
+/** drizzle() が返す型。テストや初期化スクリプトが接続を閉じられるよう `$client` を含める。 */
+export type AppDatabase = BetterSQLite3Database & { $client: Database.Database };
 
 export type DatabaseUnavailableReason =
   | 'file-not-found'
@@ -500,6 +503,7 @@ export function resolveDatabasePath(): string;
 /** in-memory SQLite を開き、drizzle/ の全マイグレーションを適用して返す。テストごとに独立した DB になる。 */
 export function createTestDatabase(): AppDatabase;
 ```
+- 使い終わったら呼び出し側が `db.$client.close()` で閉じる
 - identity と後続 spec のテストで共用する。`*.test.{ts,tsx}` からだけ import を許可する
 - 全機能のマイグレーションを適用するため、後続 spec のテーブルもそのまま使える
 
