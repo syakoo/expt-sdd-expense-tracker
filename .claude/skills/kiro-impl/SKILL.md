@@ -3,14 +3,14 @@ name: kiro-impl
 description: Implement approved tasks using TDD with native subagent dispatch. Runs all pending tasks autonomously or selected tasks manually.
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, MultiEdit, Bash, Glob, Grep, Agent, WebSearch, WebFetch
-argument-hint: <feature-name> [task-numbers] [--review required|inline|off]
+argument-hint: <feature-name> [task-numbers] [--all] [--review required|inline|off]
 ---
 
 # kiro-impl Skill
 
 ## Role
 You operate in two modes:
-- **Autonomous mode** (no task numbers): Dispatch a fresh subagent per task, with independent review after each
+- **Autonomous mode** (no task numbers): Dispatch a fresh subagent per task, with independent review after each. By default, runs one major task group per invocation and then stops so the human can `/clear` and re-run (`--all` runs every pending task)
 - **Manual mode** (task numbers provided): Execute selected tasks directly in the main context
 
 ## Core Mission
@@ -59,7 +59,10 @@ Select skills for the current task even when steering/spec context is already av
 **Parse arguments**:
 - Extract feature name from first argument
 - If task numbers provided (e.g., "1.1" or "1,2,3"): **manual mode**
-- If no task numbers: **autonomous mode** (all pending tasks)
+- If no task numbers: **autonomous mode**
+  <!-- local change: stop per major task group to keep the parent session small -->
+  - Default scope: the pending sub-tasks of the **first major task group** (e.g., all of `2.x`) that still has actionable sub-tasks
+  - `--all` → all pending tasks (original behavior)
 - Determine review mode from the invocation:
   - `--review required` or omitted → `required`
   - `--review inline` → `inline`
@@ -166,6 +169,8 @@ For each task (one at a time):
 
 **Completion check**: If all remaining tasks are BLOCKED, stop and report blocked tasks with reasons to the user.
 
+**Group boundary stop** (default scope only): When the current major task group has no actionable sub-tasks left and other pending tasks remain in tasks.md, stop here. Skip Step 4 and report the group result plus this handoff: "`/clear` してから `/kiro-impl {feature}` を再実行してください（残り N タスク）". All state needed to resume lives in tasks.md (`[x]`, `_Blocked:_`, Implementation Notes) and git commits.
+
 #### Manual Mode (main context)
 
 For each selected task:
@@ -193,6 +198,7 @@ Before writing any code, read the relevant sections of requirements.md and desig
 ### Step 4: Final Validation
 
 **Autonomous mode**:
+- Run only when no pending tasks remain in tasks.md (including after a default-scope run that finished the last group)
 - After all tasks complete, run `/kiro-validate-impl {feature}` as a GO/NO-GO gate
 - If validation returns GO → before reporting feature success, apply `kiro-verify-completion` to the feature-level claim using the validation result and fresh supporting evidence
 - If validation returns NO-GO:
@@ -228,7 +234,7 @@ For tasks that add or change behavior, enforce RED → GREEN with a feature flag
 **Autonomous mode**: For each task, report:
 1. Task ID, implementer status, reviewer verdict
 2. Files changed, commit hash
-3. After all tasks: final validation result (GO/NO-GO)
+3. After all tasks: final validation result (GO/NO-GO); or, when stopped at a group boundary: remaining task count and the `/clear` → re-run handoff
 
 **Manual mode**:
 1. Tasks executed: task numbers and test results
