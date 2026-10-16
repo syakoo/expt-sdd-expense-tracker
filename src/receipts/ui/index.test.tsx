@@ -14,6 +14,7 @@ import {
   formatYen,
   LockedNotice,
   ReceiptDetails,
+  ReceiptList,
   ReceiptNotFound,
   WorkerRoleRequired,
 } from '@/receipts/ui'
@@ -112,5 +113,89 @@ describe('ReceiptDetails', () => {
     expect(html).not.toContain('更新する')
     expect(html).not.toContain('削除する')
     expect(html).not.toContain('この領収書を削除')
+  })
+})
+
+describe('ReceiptList', () => {
+  const UNLOCKED_RECEIPT: Receipt = {
+    id: 'receipt-02' as ReceiptId,
+    ownerId: 'user-01' as UserId,
+    date: '2026-09-01',
+    amount: 500,
+    payee: '文具店',
+    category: 'supplies',
+    memo: '',
+    locked: false,
+  }
+
+  /** `<tr>...</tr>` を順に取り出す（先頭は見出し行） */
+  function rowsOf(html: string): string[] {
+    return html.match(/<tr[\s>].*?<\/tr>/g) ?? []
+  }
+
+  it('0 件なら領収書がないことと、登録画面へのリンクを出し、表は出さない', async () => {
+    const html = await renderInRouter(<ReceiptList receipts={[]} />)
+    expect(html).toContain('登録された領収書はありません')
+    expect(html).toMatch(
+      /<a[^>]*href="\/receipts\/new"[^>]*>領収書を登録する<\/a>/,
+    )
+    expect(html).not.toContain('<table')
+  })
+
+  it('1 件以上なら見出し付きの表で 6 列を出す', async () => {
+    const html = await renderInRouter(
+      <ReceiptList receipts={[LOCKED_RECEIPT, UNLOCKED_RECEIPT]} />,
+    )
+    expect(html).toMatch(/<table[\s>]/)
+    expect(html).toMatch(/<caption[^>]*>自分の領収書<\/caption>/)
+    for (const column of ['日付', '金額', '支払先', '費目', '状態', '操作']) {
+      expect(html).toMatch(
+        new RegExp(`<th[^>]*scope="col"[^>]*>${column}</th>`),
+      )
+    }
+    expect(html).not.toContain('登録された領収書はありません')
+  })
+
+  it('各行に日付・金額・支払先・費目のラベルを書式付きで、受け取った順に出す', async () => {
+    const html = await renderInRouter(
+      <ReceiptList receipts={[UNLOCKED_RECEIPT, LOCKED_RECEIPT]} />,
+    )
+    const [, first, second] = rowsOf(html)
+    expect(rowsOf(html)).toHaveLength(3)
+    expect(first).toContain('2026/09/01')
+    expect(first).toMatch(/>500円</)
+    expect(first).toContain('文具店')
+    expect(first).toMatch(/>消耗品費</)
+    expect(second).toContain('2026/10/16')
+    expect(second).toMatch(/>1,234円</)
+    expect(second).toContain('東京駅前タクシー')
+    expect(second).toMatch(/>交通費</)
+  })
+
+  it('ロック中の行だけ状態列に「ロック中」と出す', async () => {
+    const html = await renderInRouter(
+      <ReceiptList receipts={[LOCKED_RECEIPT, UNLOCKED_RECEIPT]} />,
+    )
+    const [, locked, unlocked] = rowsOf(html)
+    expect(locked).toContain('ロック中')
+    expect(unlocked).not.toContain('ロック中')
+  })
+
+  it('各行に、日付と支払先を含む名前で編集画面へのリンクを出す（ロック中でも出す）', async () => {
+    const html = await renderInRouter(
+      <ReceiptList receipts={[LOCKED_RECEIPT, UNLOCKED_RECEIPT]} />,
+    )
+    const [, locked, unlocked] = rowsOf(html)
+    // 属性の並びに依存しないよう、行の中の <a> 開始タグを取り出して属性ごとに確かめる
+    const lockedLink = locked?.match(/<a\s[^>]*>/)?.[0]
+    expect(lockedLink).toContain('href="/receipts/receipt-01/edit"')
+    expect(lockedLink).toContain(
+      'aria-label="2026/10/16 東京駅前タクシー の領収書を開く"',
+    )
+    const unlockedLink = unlocked?.match(/<a\s[^>]*>/)?.[0]
+    expect(unlockedLink).toContain('href="/receipts/receipt-02/edit"')
+    expect(unlockedLink).toContain(
+      'aria-label="2026/09/01 文具店 の領収書を開く"',
+    )
   })
 })
