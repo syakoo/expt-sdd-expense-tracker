@@ -37,6 +37,25 @@ const RESTRICT_IDENTITY_SEED = {
     '`@/identity/seed.server` はテストファイル（`*.test.ts` / `*.test.tsx`）専用です。',
 }
 
+// 個別に許可・制限するもの（schema / ui / api.server / test-fixtures.server）は除外し、下の定数で扱う
+const RESTRICT_RECEIPTS_INTERNAL = {
+  group: [
+    '@/receipts/**',
+    '!@/receipts/schema',
+    '!@/receipts/ui',
+    '!@/receipts/api.server',
+    '!@/receipts/test-fixtures.server',
+  ],
+  message:
+    '`@/receipts` の内部モジュールは import できません。`@/receipts`、`@/receipts/ui`、サーバーコードなら `@/receipts/api.server`、外部キー参照なら `@/receipts/schema` を使ってください。',
+}
+
+const RESTRICT_RECEIPTS_TEST_FIXTURES = {
+  group: ['@/receipts/test-fixtures.server'],
+  message:
+    '`@/receipts/test-fixtures.server` はテストファイル（`*.test.ts` / `*.test.tsx`）専用です。',
+}
+
 const RESTRICT_DB_INTERNAL = {
   group: ['@/db/**', '!@/db/client.server', '!@/db/test-utils.server'],
   message:
@@ -60,6 +79,12 @@ const MODULE_BOUNDARIES = [
     internal: [RESTRICT_IDENTITY_INTERNAL],
     testOnly: [RESTRICT_IDENTITY_SEED],
     appShellOnly: [RESTRICT_IDENTITY_UI],
+  },
+  {
+    dir: 'src/receipts',
+    internal: [RESTRICT_RECEIPTS_INTERNAL],
+    testOnly: [RESTRICT_RECEIPTS_TEST_FIXTURES],
+    appShellOnly: [],
   },
   {
     dir: 'src/db',
