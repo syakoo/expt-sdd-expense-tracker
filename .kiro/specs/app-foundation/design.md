@@ -218,7 +218,7 @@ data/.gitkeep                       # SQLite ファイルの置き場（DB フ�
 scripts/
 └── db-setup.ts                     # データ初期化手順：DB ファイル作成 → マイグレーション適用 → シード投入
 src/
-├── start.ts                        # createStart({ requestMiddleware })：全応答に Cache-Control: private, no-store を付ける
+├── start.ts                        # createStart({ requestMiddleware })：Server Function への CSRF 検査（createCsrfMiddleware）と、全応答に Cache-Control: private, no-store を付ける
 ├── router.tsx                      # getRouter()：createRouter({ routeTree, scrollRestoration: true, defaultPreload: false, defaultGcTime: 0, defaultErrorComponent, defaultNotFoundComponent })
 ├── routeTree.gen.ts                # ルート定義から自動生成（コミット対象、Lint と Prettier の対象外）
 ├── styles.css                      # Tailwind の読み込み
@@ -756,7 +756,7 @@ export const selectUser = createServerFn({ method: 'POST' })
   .handler(({ data }): SelectUserResult => selectCurrentUser(getDb(), data.userId));
 ```
 - 遷移はハンドラで行わず、呼び出し側（UserSelectList）が結果を見て行う。理由は `research.md` の「ユーザー選択」の決定を参照
-- TanStack Start の既定の CSRF ミドルウェア（同一オリジンの検査）に依存する。`src/start.ts` は作らない
+- CSRF は `src/start.ts` の request middleware で防ぐ。独自の `startInstance` を定義すると TanStack Start の既定の CSRF ミドルウェアが外れるため、`createCsrfMiddleware({ filter: (ctx) => ctx.handlerType === 'serverFn' })` を明示的に登録し、同一オリジン以外からの呼び出しを 403 で拒否する
 
 #### IdentityPublicApi（`src/identity/index.ts`）
 
@@ -999,6 +999,7 @@ Server Function のラッパー（`*.functions.ts`）とルートは薄い接続
   - 同じブラウザコンテキストの 2 つのタブで、タブ B でユーザーを切り替えた後、タブ A でトップ画面へ遷移すると、ヘッダーとトップ画面の両方が新しいユーザーの表示になること（3.5）
   - `current_user_id=unknown` の Cookie を設定して `/` にアクセスすると `/select-user` に遷移すること（3.9）
   - HTML 文書と Server Function の応答に `Cache-Control: private, no-store` が付くこと
+  - 別オリジン（`Origin: http://evil.example`、`Sec-Fetch-Site: cross-site`）からのユーザー選択の Server Function の呼び出しが 403 になること。同じ要求を同一オリジンのまま送れば通ること
 - `e2e/layout-accessibility.spec.ts`
   - `/select-user` と `/` の両方でヘッダーにアプリ名と切替リンクがあること（5.1）
   - キーボード（Tab / Enter）だけでユーザーを選択し、ヘッダーの切替リンクに到達できること（5.4）
@@ -1024,6 +1025,6 @@ Server Function のラッパー（`*.functions.ts`）とルートは薄い接続
 - 本格認証ではない。Cookie を書き換えれば誰にでもなれることは前提として受け入れる（ローカル開発用アプリ）
 - それでも、ブラウザから受け取った ID は DB で検証してから Cookie に書く
 - Cookie は `httpOnly` / `sameSite: 'lax'` にし、クライアントスクリプトから読ませない
-- Server Function は TanStack Start の既定の CSRF ミドルウェア（同一オリジンの検査）に依存する
+- Server Function は `src/start.ts` で明示的に登録した CSRF ミドルウェア（`createCsrfMiddleware`、同一オリジンの検査）で守る。独自の `startInstance` では既定の CSRF ミドルウェアが外れるため、`src/start.ts` の構成を変えるときはこの登録を外さない
 - `beforeLoad` のゲートは表示の保護であり、データの保護ではない。データを返す・変更する Server Function は `requireCurrentUser()` を呼ぶ規約にする
 - サーバー専用コード（DB 接続、Cookie）は `*.server.ts` にしてクライアントバンドルに入らないようにする
