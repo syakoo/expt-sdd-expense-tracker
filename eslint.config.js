@@ -49,11 +49,48 @@ const RESTRICT_DB_TEST_UTILS = {
     '`@/db/test-utils.server` はテストファイル（`*.test.ts` / `*.test.tsx`）専用です。',
 }
 
-// 内部モジュールの制限がかからないモジュール自身のファイル
-const MODULE_INTERNAL_FILES = ['src/identity/**', 'src/db/**']
+// 機能モジュールごとの境界。新しい機能モジュールを足したら、内部の制限パターンを定義してここに追加する。
+// - internal: モジュールの外から import できない内部ファイル
+// - testOnly: モジュールの外ではテストファイルからだけ使えるもの
+// - appShellOnly: モジュールの外ではアプリシェルからだけ使えるもの
+// モジュール自身のファイルには自分の分をかけず、他のモジュールの分はすべてかける
+const MODULE_BOUNDARIES = [
+  {
+    dir: 'src/identity',
+    internal: [RESTRICT_IDENTITY_INTERNAL],
+    testOnly: [RESTRICT_IDENTITY_SEED],
+    appShellOnly: [RESTRICT_IDENTITY_UI],
+  },
+  {
+    dir: 'src/db',
+    internal: [RESTRICT_DB_INTERNAL],
+    testOnly: [RESTRICT_DB_TEST_UTILS],
+    appShellOnly: [],
+  },
+]
+
+const MODULE_FILES = MODULE_BOUNDARIES.map(({ dir }) => `${dir}/**`)
 
 // `@/identity/ui` を import できるアプリシェルのルートファイル
 const APP_SHELL_FILES = ['src/routes/__root.tsx', 'src/routes/select-user.tsx']
+
+/** ownDir のファイルにかける制限パターン。ownDir がなければどのモジュールにも属さないファイル */
+function boundaryPatterns(ownDir, { testFile = false, appShell = false } = {}) {
+  return [
+    RESTRICT_PARENT_RELATIVE,
+    ...MODULE_BOUNDARIES.filter(({ dir }) => dir !== ownDir).flatMap(
+      (module) => [
+        ...module.internal,
+        ...(testFile ? [] : module.testOnly),
+        ...(appShell ? [] : module.appShellOnly),
+      ],
+    ),
+  ]
+}
+
+function restrictImports(patterns) {
+  return { 'no-restricted-imports': ['error', { patterns }] }
+}
 
 export default defineConfig(
   globalIgnores([
@@ -87,66 +124,28 @@ export default defineConfig(
   // 各ブロックで必要な制限パターンをすべて展開する
   {
     files: ['src/**/*.{ts,tsx}'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        { patterns: [RESTRICT_PARENT_RELATIVE] },
-      ],
-    },
-  },
-  {
-    files: ['src/**/*.{ts,tsx}'],
-    ignores: MODULE_INTERNAL_FILES,
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            RESTRICT_PARENT_RELATIVE,
-            RESTRICT_IDENTITY_INTERNAL,
-            RESTRICT_IDENTITY_UI,
-            RESTRICT_IDENTITY_SEED,
-            RESTRICT_DB_INTERNAL,
-            RESTRICT_DB_TEST_UTILS,
-          ],
-        },
-      ],
-    },
+    ignores: MODULE_FILES,
+    rules: restrictImports(boundaryPatterns()),
   },
   {
     files: APP_SHELL_FILES,
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            RESTRICT_PARENT_RELATIVE,
-            RESTRICT_IDENTITY_INTERNAL,
-            RESTRICT_IDENTITY_SEED,
-            RESTRICT_DB_INTERNAL,
-            RESTRICT_DB_TEST_UTILS,
-          ],
-        },
-      ],
-    },
+    rules: restrictImports(boundaryPatterns(undefined, { appShell: true })),
   },
   {
     files: ['src/**/*.test.{ts,tsx}'],
-    ignores: MODULE_INTERNAL_FILES,
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            RESTRICT_PARENT_RELATIVE,
-            RESTRICT_IDENTITY_INTERNAL,
-            RESTRICT_IDENTITY_UI,
-            RESTRICT_DB_INTERNAL,
-          ],
-        },
-      ],
-    },
+    ignores: MODULE_FILES,
+    rules: restrictImports(boundaryPatterns(undefined, { testFile: true })),
   },
+  ...MODULE_BOUNDARIES.flatMap(({ dir }) => [
+    {
+      files: [`${dir}/**/*.{ts,tsx}`],
+      rules: restrictImports(boundaryPatterns(dir)),
+    },
+    {
+      files: [`${dir}/**/*.test.{ts,tsx}`],
+      rules: restrictImports(boundaryPatterns(dir, { testFile: true })),
+    },
+  ]),
   // 整形系ルールは Prettier に任せるため、最後に置いて無効化する
   eslintConfigPrettier,
 )
