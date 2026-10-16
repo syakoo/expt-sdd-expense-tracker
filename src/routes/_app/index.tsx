@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { ROLE_LABELS } from '@/identity'
+import { TopPageView } from './-components/top-page-view'
 
 export const Route = createFileRoute('/_app/')({
   component: TopPage,
@@ -7,13 +7,5 @@ export const Route = createFileRoute('/_app/')({
 
 function TopPage() {
   const { user } = Route.useRouteContext()
-  const roleLabels = user.roles.map((role) => ROLE_LABELS[role]).join('・')
-  return (
-    <div className="flex flex-col gap-2 p-4">
-      <h1 className="text-2xl font-bold">ようこそ、{user.displayName} さん</h1>
-      <p>
-        {user.displayName} さんのロール：{roleLabels}
-      </p>
-    </div>
-  )
+  return <TopPageView user={user} />
 }
