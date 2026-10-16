@@ -37,7 +37,7 @@
   - _Boundary: ReceiptValidation_
   - _Requirements: 1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.9, 2.10_
 
-- [ ] 2.2 (P) 領収書とロックの記録の読み書き
+- [x] 2.2 (P) 領収書とロックの記録の読み書き
   - 所有者ごとの一覧（日付の降順、同じ日付なら作成の新しい順、さらに ID の降順）、ID での 1 件取得、複数 ID での取得（未検証の文字列を受け、引数の順、存在しない ID・形式が不正な ID は除き、重複は 1 件にまとめる）を、ロック中かどうかを付けて返す
   - 新しい ID と作成・更新日時を付けた挿入、所有者を変えない更新、削除、ロックの付与（既にロック中なら変えない、存在しない ID は外部キー違反（`SQLITE_CONSTRAINT_FOREIGNKEY`）で失敗）とロックの解除（ロックされていない ID は無視）を作る。書き込みは自分でトランザクションを開始しない
   - 結合テスト（in-memory DB とシードユーザー）で、一覧の並び順、ロックの有無による表示、更新で所有者が変わらないこと、ロック中の領収書の行を直接削除すると外部キー（RESTRICT）違反（`SQLITE_CONSTRAINT_TRIGGER`。`SQLITE_CONSTRAINT_FOREIGNKEY` ではない）になること、範囲外の金額と未定義の費目が CHECK 制約で拒否されること、ファイル DB を閉じて開き直しても登録内容が読めることが `npm run test` で通る
@@ -141,3 +141,4 @@
 ## Implementation Notes
 - ON DELETE RESTRICT の違反（ロック中の領収書の行の削除）は better-sqlite3 では `SQLITE_CONSTRAINT_TRIGGER`（メッセージは "FOREIGN KEY constraint failed"）になる。挿入側の外部キー違反は `SQLITE_CONSTRAINT_FOREIGNKEY`。2.2・2.6 のテストとエラーの扱いはこれを前提にする
 - マイグレーションを追加すると適用件数が変わる。`src/db/client.test.ts` は journal のエントリ数と比べる形にしてあるので、以降のマイグレーション追加では直さなくてよい
+- 読み書きの関数は `AppDatabase` を受ける。`db.transaction(...)` の中でも同じ `db` を渡せばそのトランザクションに含まれ（better-sqlite3 は 1 接続で、入れ子は SAVEPOINT になる）、drizzle の `tx` を渡す必要はない。`updateReceiptRow` は存在しない ID で Error を投げ、`deleteReceiptRow` は存在しない ID では何もしないので、呼び出し側が先に存在を確かめる
