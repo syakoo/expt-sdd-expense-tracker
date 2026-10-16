@@ -172,3 +172,31 @@ test('存在しない ID の Cookie ではユーザー選択画面に移る', as
   await expect(main(page)).not.toContainText('ようこそ')
   await expect(currentUserRegion(page)).toContainText('ユーザー未選択')
 })
+
+test('ユーザーによって内容が変わる HTML と Server Function の応答は、キャッシュさせない', async ({
+  page,
+}) => {
+  const serverFnCacheControls: Array<string | undefined> = []
+  page.on('response', (response) => {
+    if (response.url().includes('/_serverFn/')) {
+      serverFnCacheControls.push(response.headers()['cache-control'])
+    }
+  })
+
+  const documentResponse = await page.goto('/select-user')
+  expect(documentResponse?.headers()['cache-control']).toBe('private, no-store')
+
+  // 選択（POST）と、選択画面からトップ画面へのクライアント遷移（現在ユーザーを取り直す GET）を発生させる
+  await selectUser(page, HANAKO.name)
+  await currentUserRegion(page)
+    .getByRole('link', { name: 'ユーザーを切り替える' })
+    .click()
+  await expect(page).toHaveURL('/select-user')
+  await page.getByRole('banner').getByRole('link', { name: '経費精算' }).click()
+  await expectShowingUser(page, HANAKO)
+
+  expect(serverFnCacheControls.length).toBeGreaterThanOrEqual(2)
+  for (const cacheControl of serverFnCacheControls) {
+    expect(cacheControl).toBe('private, no-store')
+  }
+})

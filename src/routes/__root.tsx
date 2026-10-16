@@ -13,7 +13,6 @@ import stylesUrl from '@/styles.css?url'
 
 export const Route = createRootRoute({
   beforeLoad: async () => ({ currentUser: await getCurrentUser() }),
-  headers: () => ({ 'Cache-Control': 'private, no-store' }),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
