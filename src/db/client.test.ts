@@ -83,8 +83,11 @@ describe('openDatabase', () => {
     applyMigrations(db)
     expect(() => applyMigrations(db)).not.toThrow()
 
+    const journal = JSON.parse(
+      readFileSync(path.join(MIGRATIONS_FOLDER, 'meta/_journal.json'), 'utf8'),
+    ) as { entries: unknown[] }
     const applied = db.all(sql`SELECT id FROM __drizzle_migrations`)
-    expect(applied).toHaveLength(1)
+    expect(applied).toHaveLength(journal.entries.length)
     db.$client.close()
   })
 

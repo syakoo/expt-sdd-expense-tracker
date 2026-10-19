@@ -12,6 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as SelectUserRouteImport } from './routes/select-user'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppReceiptsIndexRouteImport } from './routes/_app/receipts/index'
+import { Route as AppReceiptsNewRouteImport } from './routes/_app/receipts/new'
+import { Route as AppReceiptsReceiptIdEditRouteImport } from './routes/_app/receipts/$receiptId.edit'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -27,27 +30,69 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppReceiptsIndexRoute = AppReceiptsIndexRouteImport.update({
+  id: '/receipts/',
+  path: '/receipts/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReceiptsNewRoute = AppReceiptsNewRouteImport.update({
+  id: '/receipts/new',
+  path: '/receipts/new',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReceiptsReceiptIdEditRoute =
+  AppReceiptsReceiptIdEditRouteImport.update({
+    id: '/receipts/$receiptId/edit',
+    path: '/receipts/$receiptId/edit',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/select-user': typeof SelectUserRoute
+  '/receipts/new': typeof AppReceiptsNewRoute
+  '/receipts/': typeof AppReceiptsIndexRoute
+  '/receipts/$receiptId/edit': typeof AppReceiptsReceiptIdEditRoute
 }
 export interface FileRoutesByTo {
   '/select-user': typeof SelectUserRoute
   '/': typeof AppIndexRoute
+  '/receipts/new': typeof AppReceiptsNewRoute
+  '/receipts': typeof AppReceiptsIndexRoute
+  '/receipts/$receiptId/edit': typeof AppReceiptsReceiptIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/select-user': typeof SelectUserRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/receipts/new': typeof AppReceiptsNewRoute
+  '/_app/receipts/': typeof AppReceiptsIndexRoute
+  '/_app/receipts/$receiptId/edit': typeof AppReceiptsReceiptIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/select-user'
+  fullPaths:
+    | '/'
+    | '/select-user'
+    | '/receipts/new'
+    | '/receipts/'
+    | '/receipts/$receiptId/edit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/select-user' | '/'
-  id: '__root__' | '/_app' | '/select-user' | '/_app/'
+  to:
+    | '/select-user'
+    | '/'
+    | '/receipts/new'
+    | '/receipts'
+    | '/receipts/$receiptId/edit'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/select-user'
+    | '/_app/'
+    | '/_app/receipts/new'
+    | '/_app/receipts/'
+    | '/_app/receipts/$receiptId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -78,15 +123,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/receipts/': {
+      id: '/_app/receipts/'
+      path: '/receipts'
+      fullPath: '/receipts/'
+      preLoaderRoute: typeof AppReceiptsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/receipts/new': {
+      id: '/_app/receipts/new'
+      path: '/receipts/new'
+      fullPath: '/receipts/new'
+      preLoaderRoute: typeof AppReceiptsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/receipts/$receiptId/edit': {
+      id: '/_app/receipts/$receiptId/edit'
+      path: '/receipts/$receiptId/edit'
+      fullPath: '/receipts/$receiptId/edit'
+      preLoaderRoute: typeof AppReceiptsReceiptIdEditRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
+  AppReceiptsNewRoute: typeof AppReceiptsNewRoute
+  AppReceiptsIndexRoute: typeof AppReceiptsIndexRoute
+  AppReceiptsReceiptIdEditRoute: typeof AppReceiptsReceiptIdEditRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
+  AppReceiptsNewRoute: AppReceiptsNewRoute,
+  AppReceiptsIndexRoute: AppReceiptsIndexRoute,
+  AppReceiptsReceiptIdEditRoute: AppReceiptsReceiptIdEditRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

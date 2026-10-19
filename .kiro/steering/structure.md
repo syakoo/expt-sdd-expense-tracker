@@ -51,6 +51,7 @@ import { parseReceiptInput } from './validation'          // 同じディレク�
 **境界のルール**（`src/` 配下のファイルに `eslint.config.js` が強制する。正確な定義はそちらを参照。`scripts/` と `e2e/` は対象外）:
 - `@/identity` の内部ファイルは import しない。使ってよいのは `@/identity` と `@/identity/schema`
 - `@/identity/ui` はアプリシェル（`__root.tsx`、`select-user.tsx`）専用
+- `@/receipts` の公開面は `@/receipts`、`@/receipts/schema`（外部キー参照）、`@/receipts/ui`（画面部品）、`@/receipts/api.server`（下流のサーバーコード向け）と、テストファイル専用の `@/receipts/test-fixtures.server`
 - `@/db` は `client.server` だけを使う
 - `@/db/test-utils.server` と `@/identity/seed.server` は、モジュールの外ではテストファイルからだけ使える
 - 機能モジュールどうしも互いの内部を import できない。新しい機能モジュールを足したら、内部の制限パターンを定義して `eslint.config.js` の `MODULE_BOUNDARIES` に追加する
