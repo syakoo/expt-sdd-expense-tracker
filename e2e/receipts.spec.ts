@@ -412,3 +412,40 @@ test('領収書の Server Function の応答に Cache-Control: private, no-store
     expect(cacheControl).toBe('private, no-store')
   }
 })
+
+test('別オリジンからの領収書登録の Server Function の呼び出しは 403 で拒否する', async ({
+  page,
+}) => {
+  const payee = uniquePayee()
+  await startAs(page, HANAKO)
+
+  // 画面からの通常の登録（同一オリジンの POST）で、登録の Server Function の URL と本文を得る
+  const registerRequestPromise = page.waitForRequest(
+    (request) =>
+      request.url().includes('/_serverFn/') && request.method() === 'POST',
+  )
+  await createReceipt(page, {
+    date: '2026-08-09',
+    amount: '100',
+    payee,
+    category: '消耗品費',
+  })
+  const registerRequest = await registerRequestPromise
+
+  const headers = await registerRequest.allHeaders()
+  const data = registerRequest.postDataBuffer() ?? undefined
+
+  const crossOriginResponse = await page.request.post(registerRequest.url(), {
+    headers: {
+      ...headers,
+      origin: 'http://evil.example',
+      'sec-fetch-site': 'cross-site',
+    },
+    data,
+  })
+  expect(crossOriginResponse.status()).toBe(403)
+
+  // 拒否された呼び出しでは登録されない（支払先が一覧に 1 件のまま）
+  await page.goto('/receipts')
+  await expect(rowOf(page, payee)).toHaveCount(1)
+})
